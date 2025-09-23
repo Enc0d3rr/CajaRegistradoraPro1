@@ -1,0 +1,25 @@
+# Entorno virtual
+env/
+
+# Archivos de base de datos
+*.db
+*.sqlite
+*.db-journal
+
+# Backups locales
+Backups/
+backups/
+
+# Archivos de Python compilados
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Archivos de configuración local
+config.json.bak
+*.bak
+
+# Tickets/archivos temporales
+tickets/

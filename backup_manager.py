@@ -84,21 +84,70 @@ class BackupWorker(QThread):
             self.message.emit(f"Error en backup: {str(e)}")
             self.finished.emit(False, f"Error: {str(e)}")
 
-    def crear_registro_backup(self, backup_path):
-        """Registra el backup en la base de datos"""
+    def verificar_y_corregir_tabla_backups(self):
+        """Verificar y corregir la estructura de la tabla backups"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS backups (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    archivo_path TEXT NOT NULL,
-                    tamaño REAL NOT NULL,
-                    tipo TEXT NOT NULL
-                )
-            """)
             
+            # Verificar si la tabla existe y su estructura
+            cursor.execute("PRAGMA table_info(backups)")
+            columnas = cursor.fetchall()
+            nombres_columnas = [col[1] for col in columnas]
+            
+            print("🔍 Estructura actual de la tabla 'backups':")
+            for col in columnas:
+                print(f"  - {col[1]} ({col[2]})")
+            
+            # Si la tabla no existe o le falta archivo_path, recrearla
+            if not columnas or 'archivo_path' not in nombres_columnas:
+                print("🔄 Corrigiendo estructura de la tabla backups...")
+                
+                # Crear tabla temporal con datos existentes si hay
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS backups_temp AS 
+                    SELECT * FROM backups WHERE 1=0
+                """)
+                
+                # Eliminar tabla vieja
+                cursor.execute("DROP TABLE IF EXISTS backups")
+                
+                # Crear tabla nueva con estructura correcta
+                cursor.execute("""
+                    CREATE TABLE backups (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        archivo_path TEXT NOT NULL,
+                        tamaño REAL NOT NULL,
+                        tipo TEXT NOT NULL
+                    )
+                """)
+                
+                # Si había datos, intentar migrar
+                try:
+                    cursor.execute("INSERT INTO backups SELECT * FROM backups_temp")
+                except:
+                    print("ℹ️ No se pudieron migrar datos existentes (estructura incompatible)")
+                
+                cursor.execute("DROP TABLE IF EXISTS backups_temp")
+                conn.commit()
+                print("✅ Estructura de tabla 'backups' corregida")
+            
+            conn.close()
+            
+        except Exception as e:
+            print(f"❌ Error verificando tabla backups: {e}")
+
+    def crear_registro_backup(self, backup_path):
+        """Registra el backup en la base de datos"""
+        try:
+            # ✅ LLAMAR A LA VERIFICACIÓN ANTES DE TODO
+            self.verificar_y_corregir_tabla_backups()
+            
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # ✅ SOLO INSERTAR EL REGISTRO (la tabla ya está verificada)
             tamaño = os.path.getsize(backup_path) / (1024 * 1024)  # MB
             cursor.execute(
                 "INSERT INTO backups (archivo_path, tamaño, tipo) VALUES (?, ?, ?)",
@@ -107,8 +156,10 @@ class BackupWorker(QThread):
             conn.commit()
             conn.close()
             
+            print(f"✅ Backup registrado en BD: {backup_path}")
+            
         except Exception as e:
-            print(f"Error registrando backup: {e}")
+            print(f"❌ Error registrando backup: {e}")
 
 class BackupManagerDialog(QDialog):
     def __init__(self, db_manager, parent=None):
@@ -221,6 +272,21 @@ class BackupManagerDialog(QDialog):
         self.auto_backup_timer = QTimer()
         self.auto_backup_timer.timeout.connect(self.verificar_auto_backup)
         self.auto_backup_timer.start(60000)  # Verificar cada minuto
+        
+        # ✅ VERIFICAR ESTRUCTURA AL INICIAR
+        self.verificar_estructura_backups()
+    
+    def verificar_estructura_backups(self):
+        """Verificación adicional en el diálogo principal"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(backups)")
+            columnas = [col[1] for col in cursor.fetchall()]
+            print("📊 Estructura de backups al iniciar:", columnas)
+            conn.close()
+        except Exception as e:
+            print(f"ℹ️ Info de estructura: {e}")
     
     def cambiar_directorio(self):
         # En una implementación real, aquí iría un QFileDialog
@@ -237,6 +303,9 @@ class BackupManagerDialog(QDialog):
                 self.list_backups.addItem(f"{backup} ({size:.2f} MB) - {date.strftime('%Y-%m-%d %H:%M')}")
     
     def ejecutar_backup(self):
+        # ✅ VERIFICACIÓN ADICIONAL ANTES DE BACKUP
+        self.verificar_estructura_backups()
+        
         self.btn_backup.setEnabled(False)
         self.lbl_status.setText("Iniciando backup...")
         

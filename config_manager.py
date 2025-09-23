@@ -72,7 +72,7 @@ class ConfigManager:
                 if key not in new_config:
                     raise ValueError(f"Falta clave requerida: {key}")
             
-            # ✅ CREAR BACKUP antes de guardar
+            # CREAR BACKUP antes de guardar
             if os.path.exists(self.config_path):
                 backup_path = self.config_path + ".bak"
                 shutil.copy2(self.config_path, backup_path)

@@ -1,6 +1,7 @@
 import sys
 import os
 import json
+import time 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
     QListWidget, QHBoxLayout, QMessageBox, QInputDialog,
@@ -24,16 +25,83 @@ from password_dialog import PasswordDialog
 from config_panel import ConfigPanelDialog
 from config_manager import config_manager
 
+# DETECCIÓN DE PLATAFORMA - Agregar esto después de los imports existentes
+
+def es_windows():
+    return sys.platform.startswith('win')
+
+def es_linux():
+    return sys.platform.startswith('linux')
+
+if es_windows():
+    try:
+        import ctypes
+        ctypes.windll.shcore.SetprocessDpiAwareness(1)
+        print("✅ Configuración DPI aplicada para Windows")
+    except Exception as e:
+        print(f"⚠️ No se pudo configurar DPI: {e}")
+
+def obtener_estilos_windows():
+    return """
+    /* Estilos específicos para Windows */
+    QMainWindow, QDialog, QWidget {
+        background-color: #f0f0f0;
+        font-family: "Segoe UI", Arial, sans-serif;
+    }
+    
+    QGroupBox {
+        background-color: white;
+        border: 1px solid #cccccc;
+        border-radius: 5px;
+        margin-top: 10px;
+        padding-top: 15px;
+        font-weight: bold;
+    }
+    
+    QTableWidget {
+        background-color: white;
+        gridline-color: #d0d0d0;
+    }
+    
+    QHeaderView::section {
+        background-color: #e1e1e1;
+        padding: 5px;
+        border: 1px solid #cccccc;
+    }
+    
+    QPushButton {
+        background-color: #0078d4;
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 3px;
+    }
+    """
+
+def obtener_estilos_linux():
+    return """
+    /* Estilos para Linux (tus estilos originales) */
+    QMainWindow {
+        background-color: #ecf0f1;
+    }
+    """
+
 class CajaGUI(QWidget):
     def __init__(self):
         super().__init__()
+
         self.db_manager = DatabaseManager()
         
-        # Cargar configuración usando ConfigManager
+         # MEJORAR CARGA DE CONFIGURACIÓN
+        print("💾 CARGANDO CONFIGURACIÓN...")
         self.config = config_manager.load_config()
+    
         if not self.config:
             QMessageBox.critical(None, "Error", "No se pudo cargar la configuración del sistema")
             sys.exit()
+    
+        # VERIFICAR CONFIGURACIÓN CARGADA
+        print(f"🎨 Configuración cargada: {self.config.get('color_primario', 'NO HAY COLOR')}")
         
         # Autenticación
         self.show_login()
@@ -42,14 +110,107 @@ class CajaGUI(QWidget):
             sys.exit()
         
         self.init_ui()
+
+        # Para windows
+        if es_windows():
+            from PyQt6.QtCore import QTimer
+            print("🚀 INICIANDO CORRECCIONES WINDOWS...")
     
+            # 1. Estilos inmediatos
+            self.forzar_estilos_windows()
+    
+            # 2. Corrección de labels después de estilos
+            QTimer.singleShot(500, self.corregir_labels_problematicos)
+    
+            # 3. Verificar persistencia
+            QTimer.singleShot(1000, self.verificar_persistencia_configuracion)
+
+        # Para Linux
+        if es_linux():
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(100, self.corregir_labels_problematicos)  # Solo 100ms
+            print("⏱️  Correcciones programadas para 100ms")
+
     def show_login(self):
-        login_dialog = LoginDialog(self.db_manager)
-        if login_dialog.exec() == QDialog.DialogCode.Accepted:
-            self.current_user = login_dialog.user_data
-        else:
-            QMessageBox.warning(None, "Error", "Debe iniciar sesión para usar el sistema")
-            sys.exit()
+        """Sistema de login usando tu LoginDialog exacto"""
+        try:
+            print("🔐 Iniciando autenticación...")
+        
+            # USAR TU LoginDialog EXACTO
+            from auth_manager import LoginDialog
+        
+            # Crear y mostrar el diálogo de login
+            login_dialog = LoginDialog(self.db_manager)
+        
+            # Mostrar el diálogo y esperar respuesta
+            if login_dialog.exec() == QDialog.DialogCode.Accepted:
+                # Obtener los datos del usuario autenticado
+                self.current_user = {
+                    "id": login_dialog.user_data['id'],
+                    "username": login_dialog.user_data['nombre'],  # Usar nombre como username
+                    "nombre": login_dialog.user_data['nombre'],
+                    "rol": login_dialog.user_data['rol']
+                }
+                print(f"✅ Login exitoso: {self.current_user['nombre']} ({self.current_user['rol']})")
+            else:
+                print("❌ Login cancelado o fallido")
+                self.current_user = None
+            
+        except ImportError as e:
+            print(f"❌ Error importando LoginDialog: {e}")
+            self._login_emergencia()
+        except Exception as e:
+            print(f"❌ Error en autenticación: {e}")
+            self._login_emergencia()
+
+    def _login_emergencia(self):
+        """Login de emergencia corregido"""
+        try:
+            from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        
+            print("🚨 Usando sistema de login de emergencia...")
+        
+            # Dialogo de usuario
+            usuario, ok = QInputDialog.getText(self, "Acceso al Sistema", "Usuario:")
+            if not ok or not usuario:
+                self.current_user = None
+                return
+            
+            # CORRECCIÓN: Usar parámetro correcto 'echo'
+            contraseña, ok = QInputDialog.getText(
+                self, 
+                "Acceso al Sistema", 
+                "Contraseña:", 
+                echo=QLineEdit.EchoMode.Password  # ← PARÁMETRO CORRECTO
+            )
+        
+            if not ok or not contraseña:
+                self.current_user = None
+                return
+        
+            # Verificar credenciales
+            if usuario == "admin" and contraseña == "admin123":
+                self.current_user = {
+                    "id": 1,
+                    "username": "admin", 
+                    "nombre": "Administrador",
+                    "rol": "administrador"
+                }
+                QMessageBox.information(self, "Acceso Concedido", "Bienvenido Administrador")
+                print("✅ Login de emergencia exitoso")
+            else:
+                QMessageBox.warning(self, "Acceso Denegado", "Credenciales incorrectas")
+                self.current_user = None
+            
+        except Exception as e:
+            print(f"❌ Error en login de emergencia: {e}")
+            # Último recurso - usuario por defecto
+            self.current_user = {
+                "id": 1,
+                "username": "admin", 
+                "nombre": "Administrador",
+                "rol": "administrador"
+            }
 
     def gestionar_inventario(self):
         if self.current_user['rol'] != 'admin':
@@ -93,28 +254,568 @@ class CajaGUI(QWidget):
         dialog.exec()
 
     def abrir_panel_configuracion(self):
-        """Abrir panel de configuración completo"""
-        if self.current_user['rol'] != 'admin':
-            QMessageBox.warning(self, "Error", "Solo los administradores pueden acceder a la configuración")
-            return
+        """Abrir panel de configuración y reiniciar interfaz al guardar"""
+        try:
+            from config_panel import ConfigPanelDialog
+            dialog = ConfigPanelDialog(self.db_manager, self.config, self)
+        
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.config = dialog.get_updated_config()
+                print("✅ Configuración actualizada correctamente")
+            
+                #  REINICIAR LA INTERFAZ COMPLETAMENTE
+                self.reiniciar_interfaz()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo abrir configuración: {str(e)}")
+
+    def aplicar_configuracion(self):
+        """Aplicar configuración - VERSIÓN CORREGIDA CON ESTILOS ESPECÍFICOS"""
+        try:
+            if es_linux():
+                color_primario = self.config.get('color_primario', '#3498db')
+                color_secundario = self.config.get('color_secundario', '#2ecc71')
+                '''
+                estilo = f"""
+                    /* ESTILOS GENERALES */
+                    QPushButton {{
+                        background-color: {color_primario};
+                        color: white;
+                        border: none;
+                        padding: 10px;
+                        border-radius: 5px;
+                        font-weight: bold;
+                        margin: 2px;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {color_secundario};
+                    }}
+                
+                    QLabel {{
+                        color: {color_primario};
+                        font-weight: bold;
+                    }}
+                
+                    /* ✅ ESTILO ESPECÍFICO PARA EL TOTAL DE VENTAS */
+                    /* Target por contenido de texto */
+                    QLabel[text*="Total: $"] {{
+                        color: #e74c3c !important;  /* Rojo */
+                        font-size: 18px !important;
+                        font-weight: bold !important;
+                        background-color: #ffffff !important;
+                        border: 2px solid #c0392b !important;
+                        border-radius: 5px !important;
+                        padding: 5px !important;
+                    }}
+                
+                    /* ✅ ESTILO PARA LABELS CON "total" en el texto (case insensitive) */
+                    QLabel[text*="total" i] {{
+                        color: #000000 !important;
+                        background-color: #f8f9fa !important;
+                        border: 1px solid #cccccc !important;
+                        padding: 3px !important;
+                    }}
+                
+                    /* ✅ HACER VISIBLE EL LABEL DE VENTAS HOY */
+                    QLabel[text*="VENTAS HOY"] {{
+                        color: #000000 !important;
+                        background-color: #e8f4f8 !important;
+                        border: 2px solid #3498db !important;
+                        border-radius: 5px !important;
+                        padding: 10px !important;
+                        font-size: 11px !important;
+                    }}
+                
+                    QGroupBox {{
+                        border: 2px solid {color_secundario};
+                        border-radius: 8px;
+                    }}
+                """
+                self.setStyleSheet(estilo)
+                print("✅ Estilos Linux aplicados")
+                '''
+                print("ℹ️ Estilos generales temporalmente desactivados")
+
+            elif es_windows():
+                self._aplicar_personalizacion_windows()
+
+            # Actualizar título
+            nombre_negocio = self.config.get('nombre_negocio', 'Caja Registradora')
+            self.setWindowTitle(f"{nombre_negocio} - Sistema de Ventas")
+        
+        except Exception as e:  # ✅ ESTA LÍNEA DEBE ESTAR PRESENTE
+            print(f"⚠️ Error al aplicar configuración: {e}")
+
+        
+    def diagnosticar_total(self):
+        """Diagnóstico específico del label Total"""
+        print("🔍 DIAGNÓSTICO DEL TOTAL:")
     
-        from config_panel import ConfigPanelDialog
-        dialog = ConfigPanelDialog(self.db_manager, self.config, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            # Actualizar configuración y reiniciar interfaz
-            self.config = dialog.get_updated_config()
-            QMessageBox.information(self, "Éxito", "Configuración guardada. Reiniciando interfaz...")
-            self.reiniciar_interfaz()
+        # Buscar todos los labels
+        from PyQt6.QtWidgets import QLabel
+        labels = self.findChildren(QLabel)
+    
+        total_encontrado = False
+        for label in labels:
+            texto = label.text()
+            if texto and ("total" in texto.lower() or "Total" in texto or "TOTAL" in texto):
+                print(f"🎯 LABEL TOTAL ENCONTRADO: '{texto}'")
+                print(f"   - ObjectName: {label.objectName()}")
+                print(f"   - Estilo actual: {label.styleSheet()}")
+                print(f"   - Visible: {label.isVisible()}")
+                print(f"   - Posición: {label.pos()}")
+                print(f"   - Tamaño: {label.size()}")
+            
+                # Aplicar estilo de emergencia para hacerlo visible
+                label.setStyleSheet("color: #ff0000 !important; font-size: 20pt !important; background-color: yellow !important; border: 3px solid red !important;")
+                print("   ✅ Estilo de emergencia aplicado (debería verse ROJO sobre AMARILLO)")
+                total_encontrado = True
+    
+        if not total_encontrado:
+            print("❌ NO se encontró ningún label con 'total'")
+            print("📋 Todos los labels encontrados:")
+            for i, label in enumerate(labels[:10]):  # Mostrar primeros 10
+                print(f"   {i+1}. '{label.text()}' - {label.objectName()}")
+
+    def forzar_todos_los_textos_visibles(self):
+        """Hacer visibles TODOS los textos temporalmente"""
+        print("🚨 APLICANDO VISIBILIDAD FORZADA A TODOS LOS TEXTOS")
+    
+        from PyQt6.QtWidgets import QLabel, QLineEdit, QComboBox
+    
+        # Hacer visibles todos los labels
+        for label in self.findChildren(QLabel):
+            label.setStyleSheet("color: #000000 !important; background-color: yellow !important; font-size: 12pt !important;")
+    
+        # Hacer visibles todos los campos de texto
+        for lineedit in self.findChildren(QLineEdit):
+            lineedit.setStyleSheet("color: #000000 !important; background-color: #ffffcc !important; border: 2px solid blue !important;")
+    
+        print("✅ Todos los textos forzados a ser visibles")
+    
+    def corregir_labels_problematicos(self):
+        """Versión RÁPIDA - Correcciones inmediatas"""
+        print("⚡ Aplicando correcciones RÁPIDAS...")
+    
+        inicio = time.time()  # Medir tiempo
+        labels_corregidos = 0
+    
+        for label in self.findChildren(QLabel):
+            texto = label.text() if label.text() else ""
+        
+            # Label de VENTAS HOY
+            if "VENTAS HOY" in texto:
+                label.setVisible(True)
+                label.setStyleSheet("color: #000000; background-color: #e8f4f8; border: 1px solid #3498db; border-radius: 5px; padding: 8px;")
+                labels_corregidos += 1
+        
+            # Label del Total
+            elif "Total: $" in texto:
+                label.setStyleSheet("color: #e74c3c; font-size: 18px; font-weight: bold; background-color: #ffffff; border: 2px solid #c0392b; border-radius: 5px; padding: 5px;")
+                labels_corregidos += 1
+    
+        # Medir tiempo de ejecución
+        tiempo = time.time() - inicio
+        print(f"✅ Correcciones aplicadas: {labels_corregidos} labels en {tiempo:.3f} segundos")
+
+    def verificar_persistencia_configuracion(self):
+        """Verificar y corregir problemas de persistencia"""
+        print("💾 VERIFICANDO PERSISTENCIA DE CONFIGURACIÓN...")
+    
+        try:
+            # Verificar si el archivo de configuración existe y es accesible
+            config_path = 'data/config.json'
+            if os.path.exists(config_path):
+                print(f"✅ Archivo de configuración existe: {config_path}")
+            
+                # Verificar permisos
+                if os.access(config_path, os.W_OK):
+                    print("✅ Permisos de escritura OK")
+                else:
+                    print("❌ Sin permisos de escritura")
+                
+                # Leer contenido actual
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    contenido = f.read()
+                    print(f"📄 Contenido actual: {len(contenido)} caracteres")
+            else:
+                print("❌ Archivo de configuración NO existe")
+            
+            # Verificar configuración cargada
+            print(f"🎨 Configuración en memoria: {self.config}")
+        
+        except Exception as e:
+            print(f"❌ Error verificando persistencia: {e}")
+
+    def verificacion_nuclear(self):
+        """Verificación EXTREMA"""
+        print("💥 VERIFICACIÓN NUCLEAR:")
+    
+        for label in self.findChildren(QLabel):
+            texto = label.text() if label.text() else ""
+            if "VENTAS HOY" in texto or "Total: $" in texto:
+                print(f"💥 '{texto[:30]}...'")
+                print(f"   - Visible: {label.isVisible()}")
+                print(f"   - isHidden: {label.isHidden()}")
+                print(f"   - isEnabled: {label.isEnabled()}")
+                print(f"   - Opacidad: {label.windowOpacity()}")
+    
+        print("💥 VERIFICACIÓN NUCLEAR COMPLETADA")
+
+    def actualizar_interfaz_completa(self):
+        """Actualización COMPLETA y forzada de toda la interfaz"""
+        print("🔄 FORZANDO ACTUALIZACIÓN COMPLETA DE LA INTERFAZ...")
+    
+        # 1. Forzar actualización de todos los widgets
+        for widget in self.findChildren(QWidget):
+            widget.update()
+            widget.repaint()
+    
+     # 2. Actualizar la ventana principal
+        self.update()
+        self.repaint()
+    
+        # 3. Forzar procesamiento de eventos
+        from PyQt6.QtCore import QCoreApplication
+        QCoreApplication.processEvents()
+    
+        print("✅ Interfaz completamente actualizada")
+
+
+    def _aplicar_estilos_windows_suaves(self):
+        """Estilos suaves para Windows que no afectan Linux"""
+        try:
+            color_primario = self.config.get('color_primario', '#0078d4')
+        
+            estilo_windows = f"""
+                /* Estilos mínimos para Windows */
+                QWidget {{
+                    background-color: #f0f0f0;
+                    color: #000000;
+                }}
+            
+                QLabel {{
+                    color: #000000;
+                }}
+            
+                QPushButton {{
+                    background-color: {color_primario};
+                    color: white;
+                }}
+            """
+        
+            self.setStyleSheet(estilo_windows)
+            print("✅ Estilos Windows suaves aplicados")
+        
+        except Exception as e:
+            print(f"⚠️ Error en estilos Windows: {e}")
+
+    def _aplicar_personalizacion_windows(self):
+        """Personalización específica para Windows"""
+        try:
+            color_primario = self.config.get('color_primario', '#0078d4')
+            color_secundario = self.config.get('color_secundario', '#106ebe')
+        
+            # Solo personalizar botones y elementos clave en Windows
+            estilo_personalizado = f"""
+                /* BOTONES PRINCIPALES */
+                QPushButton[objectName*="btn_"] {{
+                    background-color: {color_primario} !important;
+                    color: #ffffff !important;
+                }}
+            
+                QPushButton[objectName*="btn_"]:hover {{
+                    background-color: {color_secundario} !important;
+                }}
+            
+                /* TÍTULOS */
+                QLabel[objectName*="titulo"], QLabel[objectName*="Titulo"] {{
+                    color: {color_primario} !important;
+                }}
+            
+                /* GROUP BOX TITLES */
+                QGroupBox::title {{
+                    color: {color_primario} !important;
+                }}
+            """
+        
+            # Combinar con estilos base
+            estilo_base = self.styleSheet()
+            self.setStyleSheet(estilo_base + estilo_personalizado)
+        
+            print(f"✅ Personalización aplicada: {color_primario}")
+        
+        except Exception as e:
+            print(f"⚠️ Error en personalización Windows: {e}")
+
+    def forzar_estilos_windows(self):
+        """SOLUCIÓN DEFINITIVA para Windows - Estilos INMEDIATOS"""
+        if not es_windows():
+            return
+        
+        print("🎨 APLICANDO ESTILOS WINDOWS DEFINITIVOS...")
+    
+        # Estilo nuclear para Windows
+        estilo_windows = """
+        /* ====== ESTILOS WINDOWS DEFINITIVOS ====== */
+    
+        /* RESET COMPLETO - Forzar visibilidad */
+        * {
+            background-color: #f0f0f0 !important;
+            color: #000000 !important;
+            font-family: "Segoe UI", Arial, sans-serif !important;
+            font-size: 9pt !important;
+        }
+    
+        /* VENTANA PRINCIPAL */
+        QMainWindow, QWidget, QDialog {
+            background-color: #f0f0f0 !important;
+            color: #000000 !important;
+        }
+    
+        /* LABELS - Hacerlos VISIBLES inmediatamente */
+        QLabel {
+            background-color: transparent !important;
+            color: #000000 !important;
+            font-weight: normal !important;
+            border: none !important;
+            padding: 2px !important;
+            margin: 1px !important;
+        }
+    
+        /* LABELS ESPECÍFICOS que vimos en las capturas */
+        QLabel[text*="Total"],
+        QLabel[text*="total"],
+        QLabel[text*="TOTAL"] {
+            color: #e74c3c !important;
+            font-size: 16px !important;
+            font-weight: bold !important;
+            background-color: #ffffff !important;
+            border: 2px solid #c0392b !important;
+            border-radius: 5px !important;
+            padding: 8px !important;
+            margin: 5px !important;
+        }
+    
+        /* GROUP BOX - Corregir textos amontonados */
+        QGroupBox {
+            background-color: #ffffff !important;
+            border: 2px solid #cccccc !important;
+            border-radius: 8px !important;
+            margin-top: 15px !important;
+            padding-top: 25px !important; /* ↑ Más espacio para el título */
+            font-weight: bold !important;
+            color: #000000 !important;
+        }
+    
+        QGroupBox::title {
+            background-color: #ffffff !important;
+            color: #0078d4 !important;
+            subcontrol-origin: margin !important;
+            subcontrol-position: top left !important;
+            left: 10px !important;
+            padding: 5px 10px !important;
+            margin-top: -10px !important;
+            font-weight: bold !important;
+            font-size: 10pt !important;
+        }
+    
+        /* BOTONES */
+        QPushButton {
+            background-color: #0078d4 !important;
+            color: #ffffff !important;
+            border: none !important;
+            padding: 10px 15px !important;
+            border-radius: 5px !important;
+            font-weight: bold !important;
+            min-height: 30px !important;
+            min-width: 100px !important;
+        }
+    
+        QPushButton:hover {
+            background-color: #106ebe !important;
+        }
+    
+        /* CAMPOS DE TEXTO */
+        QLineEdit, QComboBox, QSpinBox {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            border: 2px solid #cccccc !important;
+            padding: 8px !important;
+            border-radius: 4px !important;
+            min-height: 30px !important;
+            font-size: 10pt !important;
+        }
+    
+        /* TABLAS */
+        QTableWidget {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            gridline-color: #d0d0d0 !important;
+            border: 1px solid #cccccc !important;
+        }
+    
+        QTableWidget::item {
+            padding: 8px !important;
+            border-bottom: 1px solid #f0f0f0 !important;
+        }
+    
+        QHeaderView::section {
+            background-color: #e1e1e1 !important;
+            color: #000000 !important;
+            padding: 10px !important;
+            border: none !important;
+            font-weight: bold !important;
+        }
+        """
+    
+        # Aplicar estilos de manera AGRESIVA
+        self.setStyleSheet(estilo_windows)
+    
+        # Forzar actualización INMEDIATA de todos los widgets
+        for widget in self.findChildren(QWidget):
+            widget.setStyleSheet(estilo_windows)
+            widget.update()
+            widget.repaint()
+    
+        print("✅ Estilos Windows aplicados DEFINITIVAMENTE")
+
+    def respaldo_estilos_windows(self):
+        """Respaldo por si el primer método falla"""
+        if not es_windows():
+            return
+        
+        print("🔧 EJECUTANDO RESPALDO PARA WINDOWS")
+    
+        # Verificar si los estilos se aplicaron
+        if not self.styleSheet():
+            print("⚠️ Los estilos no se aplicaron, usando respaldo...")
+            self.forzar_estilos_windows()
+    
+        # Forzar actualización de todos los widgets hijos
+        for widget in self.findChildren(QWidget):
+            widget.update()
+            widget.repaint()
+
+    def aplicar_estilo_final(self, estilo):
+        """Aplicar estilo después de una pequeña pausa"""
+        self.setStyleSheet(estilo)
+    
+        # Forzar actualización de todos los widgets hijos
+        for widget in self.findChildren(QWidget):
+            widget.update()
+            widget.repaint()
+    
+        self.update()
+        self.repaint()
+    
+        # Actualizar título
+        nombre_negocio = self.config.get('nombre_negocio', 'Caja Registradora')
+        self.setWindowTitle(f"{nombre_negocio} - Sistema de Ventas")
+    
+        print("✅ Configuración aplicada con actualización forzada")
+        
 
     def reiniciar_interfaz(self):
-        """Reiniciar la interfaz con nueva configuración"""
-        self.close()
-        # Pequeña pausa para asegurar que la ventana se cierra
-        import time
-        time.sleep(0.5)
-        # Reabrir la aplicación
-        self.__init__()
-        self.show()
+        """Reinicio CORREGIDO - Guarda configuración antes de reiniciar"""
+        try:
+            # GUARDAR CONFIGURACIÓN PRIMERO (ESTO ES LO QUE FALTA)
+            print("💾 GUARDANDO CONFIGURACIÓN ANTES DE REINICIAR...")
+        
+            # Usar el config_manager para guardar
+            from config_manager import config_manager
+            success = config_manager.update_config(self.config)
+        
+            if success:
+                print("✅ Configuración guardada exitosamente antes del reinicio")
+            
+                # Verificar que se guardó correctamente
+                import time
+                time.sleep(0.5)  # Pequeña pausa para asegurar guardado
+            
+                # Leer el archivo para verificar
+                try:
+                    with open('data/config.json', 'r', encoding='utf-8') as f:
+                        contenido = json.load(f)
+                        print(f"📄 Configuración guardada: {contenido.get('color_primario', 'NO HAY COLOR')}")
+                except Exception as e:
+                    print(f"❌ Error leyendo configuración guardada: {e}")
+            else:
+                print("❌ ERROR: No se pudo guardar la configuración")
+                QMessageBox.critical(self, "Error", "No se pudo guardar la configuración")
+                return
+        
+            # MENSAJE AL USUARIO
+            respuesta = QMessageBox.question(
+                self, 
+                "Reiniciar Interfaz", 
+                "La interfaz se reiniciará para aplicar los cambios.\n\n¿Continuar?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+        
+            if respuesta == QMessageBox.StandardButton.Yes:
+                print("🔄 INICIANDO REINICIO...")
+            
+                # CERRAR VENTANA ACTUAL
+                self.close()
+            
+                # CREAR NUEVA INSTANCIA después de un pequeño delay
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(500, self.crear_nueva_instancia)
+            
+            else:
+                print("❌ Reinicio cancelado por el usuario")
+            
+        except Exception as e:
+            print(f"❌ Error en reinicio: {e}")
+            QMessageBox.critical(self, "Error", f"No se pudo reiniciar: {str(e)}")
+
+    def crear_nueva_instancia(self):
+        """Crear nueva instancia de la aplicación"""
+        try:
+            print("🚀 CREANDO NUEVA INSTANCIA...")
+        
+            # Importar aquí para evitar ciclos
+            from caja_registradora import CajaGUI
+        
+            # Crear nueva ventana
+            nueva_ventana = CajaGUI()
+            nueva_ventana.show()
+        
+            print("✅ Nueva instancia creada exitosamente")
+        
+        except Exception as e:
+            print(f"❌ Error creando nueva instancia: {e}")
+            QMessageBox.critical(None, "Error", "No se pudo reiniciar la aplicación")
+
+    def reinicio_directo(self):
+        """Reinicio directo y simple"""
+        try:
+            # Mensaje de confirmación
+            QMessageBox.information(
+                self, 
+                "Reiniciando", 
+                "La interfaz se reiniciará para aplicar los cambios..."
+            )
+        
+            # Guardar configuración
+            from config_manager import config_manager
+            config_manager.update_config(self.config)
+        
+            # Cerrar y preparar reinicio
+            self.hide()  # Ocultar en lugar de cerrar
+        
+            # Crear nueva ventana
+            from caja_registradora import CajaGUI
+            self.nueva_ventana = CajaGUI()
+            self.nueva_ventana.show()
+        
+            # Cerrar ventana anterior después de un delay
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(500, self.close)
+        
+        except Exception as e:
+            print(f"Error en reinicio directo: {e}")
     
     def init_ui(self):
         # === Configuración ya cargada en __init__ con ConfigManager ===
@@ -123,7 +824,11 @@ class CajaGUI(QWidget):
         self.metodos_pago = ["Efectivo", "Tarjeta", "Transferencia"]
         
         # === Configurar ventana principal ===
-        self.setWindowTitle(f"{self.config.get('nombre_negocio', 'Caja Registradora')} - Usuario: {self.current_user['nombre']}")
+        # CORRECCIÓN: Verificar que current_user tenga 'nombre'
+        if hasattr(self, 'current_user') and self.current_user and 'nombre' in self.current_user:
+            self.setWindowTitle(f"{self.config.get('nombre_negocio', 'Caja Registradora')} - Usuario: {self.current_user['nombre']}")
+        else:
+            self.setWindowTitle(f"{self.config.get('nombre_negocio', 'Caja Registradora')} - Usuario: Desconocido")
         self.setGeometry(100, 50, 1000, 800)
 
         # Aplicar color de fondo

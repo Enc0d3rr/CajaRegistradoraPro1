@@ -8,10 +8,30 @@ from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtCore import Qt
 import os
 import json
+import sys
 
 class ConfigPanelDialog(QDialog):
     def __init__(self, db_manager, config, parent=None):
         super().__init__(parent)
+
+        # ✅ SOLUCIÓN WINDOWS INMEDIATA PARA DIÁLOGOS
+        if sys.platform.startswith('win'):
+            self.setStyleSheet("""
+                QDialog { 
+                    background-color: #f0f0f0 !important; 
+                    font-family: "Segoe UI", Arial, sans-serif !important;
+                }
+                QGroupBox { 
+                    background-color: white !important; 
+                    border: 1px solid #ccc !important;
+                }
+                QLabel { 
+                    color: #000000 !important; 
+                    background-color: transparent !important;
+                }
+            
+            """)
+
         self.db_manager = db_manager
         self.config = config.copy()  # Copia para trabajar
         self.setWindowTitle("Panel de Configuración - Administrador")
@@ -199,32 +219,43 @@ class ConfigPanelDialog(QDialog):
     
     def agregar_usuario(self):
         """Agregar nuevo usuario"""
-        from user_manager import UserManagerDialog
-        dialog = UserManagerDialog(self.db_manager, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.cargar_usuarios()
+        try:
+            
+            from user_manager import UserManagerDialog
+        
+            # Pasar solo los parámetros necesarios
+            dialog = UserManagerDialog(db_manager=self.db_manager, parent=self)
+        
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.cargar_usuarios()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo abrir el editor de usuarios: {str(e)}")
     
     def editar_usuario(self):
         """Editar usuario seleccionado"""
         try:
-            # Importar DENTRO del método
+
             from user_manager import UserManagerDialog
-        
+    
             fila = self.tabla_usuarios.currentRow()
             if fila >= 0:
                 id_usuario = int(self.tabla_usuarios.item(fila, 0).text())
-            
-                dialog = UserManagerDialog(self.db_manager, id_usuario, self)
-            
+        
+                # Pasar parámetros simples
+                dialog = UserManagerDialog(
+                    db_manager=self.db_manager, 
+                    user_id=id_usuario,  # Parámetro simple, no objeto
+                    parent=self
+                )
+        
                 if dialog.exec() == QDialog.DialogCode.Accepted:
                     self.cargar_usuarios()
             else:
                 QMessageBox.warning(self, "Error", "Selecciona un usuario para editar")
-            
-        except ImportError as e:
-            QMessageBox.critical(self, "Error", f"No se pudo cargar el editor de usuarios: {e}")
+        
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error al editar usuario: {e}")
+            QMessageBox.critical(self, "Error", f"Error al editar usuario: {str(e)}")
     
     def eliminar_usuario(self):
         """Eliminar usuario seleccionado"""
@@ -308,8 +339,8 @@ class ConfigPanelDialog(QDialog):
             if not nombre_negocio:
                 QMessageBox.warning(self, "Error", "El nombre del negocio no puede estar vacío")
                 return
-            
-            # ✅ VALIDAR IMPUESTOS (0-100%)
+        
+            # Validar impuestos (0-100%)
             try:
                 impuestos = float(self.impuestos_input.text())
                 if impuestos < 0 or impuestos > 100:
@@ -318,12 +349,21 @@ class ConfigPanelDialog(QDialog):
             except ValueError:
                 QMessageBox.warning(self, "Error", "Los impuestos deben ser un número válido")
                 return
-            
-            # ACTUALIZAR self.config con los nuevos valores
-            self.config['nombre_negocio'] = nombre_negocio
-            self.config['moneda'] = self.moneda_combo.currentText()
-            self.config['impuestos'] = impuestos
         
+            # ACTUALIZAR self.config con los valores ACTUALES del formulario
+            self.config.update({
+                'nombre_negocio': nombre_negocio,
+                'moneda': self.moneda_combo.currentText(),
+                'impuestos': impuestos,
+                # Los colores YA deberían estar en self.config desde los métodos de selección
+                # pero nos aseguramos de tener los valores actuales
+                'color_primario': self.config.get('color_primario', '#3498db'),
+                'color_secundario': self.config.get('color_secundario', '#2ecc71'),
+                'logo_path': self.config.get('logo_path', '')
+            })
+        
+            print(f"DEBUG - Config a guardar: {self.config}")  # ✅ Para debugging
+    
             # Guardar en archivo
             from config_manager import config_manager
             if config_manager.update_config(self.config):
@@ -331,10 +371,24 @@ class ConfigPanelDialog(QDialog):
                 self.accept()
             else:
                 QMessageBox.warning(self, "Error", "No se pudo guardar la configuración")
-            
+        
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Error al guardar: {str(e)}")
 
     def get_updated_config(self):
         """Devolver la configuración actualizada"""
+        # Asegurarnos de que tenemos los valores más recientes
+        try:
+            impuestos = float(self.impuestos_input.text())
+        except ValueError:
+            impuestos = self.config.get('impuestos', 16.0)
+        
+        self.config.update({
+            'nombre_negocio': self.nombre_input.text().strip(),
+            'moneda': self.moneda_combo.currentText(),
+            'impuestos': impuestos,
+            'color_primario': self.config.get('color_primario', '#3498db'),
+            'color_secundario': self.config.get('color_secundario', '#2ecc71'),
+            'logo_path': self.config.get('logo_path', '')
+        })
         return self.config.copy()
