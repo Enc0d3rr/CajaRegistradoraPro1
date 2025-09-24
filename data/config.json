@@ -1,11 +1,12 @@
 {
     "nombre_negocio": "Mi Negocio",
-    "color_primario": "#3498db",
-    "color_secundario": "#2ecc71",
-    "logo_path": "logo.png",
     "moneda": "MXN",
     "impuestos": 16.0,
+    "logo_path": "logo.png",
+    "color_primario": "#3498db",
+    "color_secundario": "#2ecc71",
     "direccion": "",
     "telefono": "",
-    "rfc": ""
+    "rfc": "",
+    "tema": "oscuro"
 }

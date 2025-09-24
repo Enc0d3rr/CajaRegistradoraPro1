@@ -262,6 +262,7 @@ class UserManagerDialog(QDialog):
         )
         
         if ok and nueva_password:
+            
             if len(nueva_password) < 4:
                 QMessageBox.warning(self, "Error", "La contraseña debe tener al menos 4 caracteres")
                 return

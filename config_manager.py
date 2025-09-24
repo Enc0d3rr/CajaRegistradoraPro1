@@ -57,10 +57,16 @@ class ConfigManager:
     def ensure_default_values(self, config):
         """Asegurar que la configuración tenga todos los valores requeridos"""
         default_config = self.create_default_config()
+
+        if 'tema' not in config:
+            config['tema'] = 'claro'
+            logger.info("✅ Tema agregado por defecto: claro")
+
         for key, value in default_config.items():
             if key not in config:
                 config[key] = value
                 logger.warning(f"⚠️ Valor por defecto agregado: {key} = {value}")
+
         return config
 
     def update_config(self, new_config):
@@ -106,7 +112,8 @@ class ConfigManager:
             "impuestos": 16.0,
             "direccion": "",
             "telefono": "",
-            "rfc": ""
+            "rfc": "",
+            "tema": "claro"
         }
         success = self.update_config(default_config)
         return default_config if success else None
