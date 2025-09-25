@@ -6,6 +6,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPalette, QColor
 from PyQt6.QtCore import Qt
 
+from utils.helpers import formato_moneda_mx
+
 class InventoryManagerDialog(QDialog):
     def __init__(self, db_manager, parent=None):
         super().__init__(parent)
@@ -172,7 +174,8 @@ class InventoryManagerDialog(QDialog):
                 self.table.setItem(row, 0, QTableWidgetItem(str(id_)))
                 self.table.setItem(row, 1, QTableWidgetItem(codigo))
                 self.table.setItem(row, 2, QTableWidgetItem(nombre))
-                self.table.setItem(row, 3, QTableWidgetItem(f"${precio:.2f}"))
+                precio_formateado = formato_moneda_mx(precio)
+                self.table.setItem(row, 3, QTableWidgetItem(precio_formateado))
                 self.table.setItem(row, 4, QTableWidgetItem(str(stock)))
                 self.table.setItem(row, 5, QTableWidgetItem(str(stock_min)))
                 self.table.setItem(row, 6, QTableWidgetItem(categoria_nombre or "Sin categoría"))
@@ -265,7 +268,9 @@ class InventoryManagerDialog(QDialog):
                 )
                 conn.commit()
             
-            QMessageBox.information(self, "Éxito", "Producto agregado correctamente")
+            precio_formateado = formato_moneda_mx(precio_val)
+            QMessageBox.information(self, "Éxito", f"Producto '{nombre}' agregado\nPrecio: {precio_formateado}")
+
             self.cargar_productos()
             self.limpiar_formulario()
             
@@ -317,7 +322,9 @@ class InventoryManagerDialog(QDialog):
                 )
                 conn.commit()
             
-            QMessageBox.information(self, "Éxito", "Producto actualizado correctamente")
+            precio_formateado = formato_moneda_mx(precio_val)
+            QMessageBox.information(self, "Éxito", f"Producto actualizado\nNuevo precio: {precio_formateado}")
+
             self.cargar_productos()
             self.limpiar_formulario()
             

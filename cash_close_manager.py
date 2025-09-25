@@ -8,6 +8,7 @@ from PyQt6.QtGui import QPalette, QColor, QFont
 from PyQt6.QtCore import Qt, QDate
 from datetime import datetime, timedelta
 from export_dialog import ExportDialog
+from utils.helpers import formato_moneda_mx
 
 class CashCloseManagerDialog(QDialog):
     def __init__(self, db_manager, current_user, parent=None):
@@ -243,10 +244,10 @@ class CashCloseManagerDialog(QDialog):
             
             self.sales_table.setRowCount(len(ventas))
             for row, (id_, fecha, total, iva, metodo_pago, usuario) in enumerate(ventas):
-                self.sales_table.setItem(row, 0, QTableWidgetItem(str(id_)))
-                self.sales_table.setItem(row, 1, QTableWidgetItem(fecha))
-                self.sales_table.setItem(row, 2, QTableWidgetItem(f"${total:.2f}"))
-                self.sales_table.setItem(row, 3, QTableWidgetItem(f"${iva:.2f}"))
+                total_formateado = formato_moneda_mx(total)
+                iva_formateado = formato_moneda_mx(iva)
+                self.sales_table.setItem(row, 2, QTableWidgetItem(total_formateado))
+                self.sales_table.setItem(row, 3, QTableWidgetItem(iva_formateado))
                 self.sales_table.setItem(row, 4, QTableWidgetItem(metodo_pago))
                 self.sales_table.setItem(row, 5, QTableWidgetItem(usuario))
     
@@ -275,7 +276,8 @@ class CashCloseManagerDialog(QDialog):
             for row, (nombre, cantidad, total, categoria, ultima_venta) in enumerate(productos):
                 self.products_table.setItem(row, 0, QTableWidgetItem(nombre))
                 self.products_table.setItem(row, 1, QTableWidgetItem(str(cantidad)))
-                self.products_table.setItem(row, 2, QTableWidgetItem(f"${total:.2f}"))
+                total_formateado = formato_moneda_mx(total)
+                self.products_table.setItem(row, 2, QTableWidgetItem(total_formateado))
                 self.products_table.setItem(row, 3, QTableWidgetItem(categoria))
                 self.products_table.setItem(row, 4, QTableWidgetItem(ultima_venta))
     
@@ -298,20 +300,25 @@ class CashCloseManagerDialog(QDialog):
             # Total general
             cursor.execute("SELECT SUM(total) FROM ventas WHERE fecha BETWEEN ? AND ?", (fecha_desde, fecha_hasta))
             total_general = cursor.fetchone()[0] or 0
+
+            self.ventas_efectivo.setText(formato_moneda_mx(totales['Efectivo']))
+            self.ventas_tarjeta.setText(formato_moneda_mx(totales['Tarjeta']))
+            self.ventas_transferencia.setText(formato_moneda_mx(totales['Transferencia']))
+            self.total_ventas.setText(formato_moneda_mx(total_general))
             
             # Actualizar campos
-            self.ventas_efectivo.setText(f"${totales['Efectivo']:.2f}")
-            self.ventas_tarjeta.setText(f"${totales['Tarjeta']:.2f}")
-            self.ventas_transferencia.setText(f"${totales['Transferencia']:.2f}")
-            self.total_ventas.setText(f"${total_general:.2f}")
+            total_general_formateado = formato_moneda_mx(total_general)
+            efectivo_formateado = formato_moneda_mx(totales['Efectivo'])
+            tarjeta_formateado = formato_moneda_mx(totales['Tarjeta'])
+            transferencia_formateado = formato_moneda_mx(totales['Transferencia'])
             
             # Resumen de ventas
             summary_text = f"""
             📊 REPORTE DE VENTAS ({fecha_desde} a {fecha_hasta.split()[0]})
-            • Total Ventas: ${total_general:.2f}
-            • Efectivo: ${totales['Efectivo']:.2f}
-            • Tarjeta: ${totales['Tarjeta']:.2f}
-            • Transferencia: ${totales['Transferencia']:.2f}
+            • Total Ventas: {total_general_formateado}
+            • Efectivo: {efectivo_formateado}
+            • Tarjeta: {tarjeta_formateado}
+            • Transferencia: {transferencia_formateado}
             • N° de Ventas: {self.sales_table.rowCount()}
             """
             self.sales_summary.setPlainText(summary_text)
@@ -322,7 +329,7 @@ class CashCloseManagerDialog(QDialog):
             ventas_efectivo = float(self.ventas_efectivo.text().replace('$', '') or 0)
             
             efectivo_esperado = efectivo_inicial + ventas_efectivo
-            self.efectivo_caja.setText(f"${efectivo_esperado:.2f}")
+            self.efectivo_caja.setText(formato_moneda_mx(efectivo_esperado))
             
             # Pedir al usuario el efectivo físico contado
             efectivo_fisico, ok = QInputDialog.getDouble(
@@ -333,7 +340,7 @@ class CashCloseManagerDialog(QDialog):
             
             if ok:
                 diferencia = efectivo_fisico - efectivo_esperado
-                self.diferencia.setText(f"${diferencia:.2f}")
+                self.diferencia.setText(formato_moneda_mx(diferencia))
                 
                 if diferencia != 0:
                     color = "#ffcccc" if diferencia < 0 else "#ccffcc"
@@ -425,9 +432,9 @@ class CashCloseManagerDialog(QDialog):
                 for row, (fecha, monto_inicial, efectivo_final, total_ventas, usuario) in enumerate(cierres):
 
                     self.history_table.setItem(row, 0, QTableWidgetItem(str(fecha)))
-                    self.history_table.setItem(row, 1, QTableWidgetItem(f"${monto_inicial:.2f}"))
-                    self.history_table.setItem(row, 2, QTableWidgetItem(f"${efectivo_final:.2f}"))
-                    self.history_table.setItem(row, 3, QTableWidgetItem(f"${total_ventas:.2f}"))
+                    self.history_table.setItem(row, 1, QTableWidgetItem(formato_moneda_mx(monto_inicial)))
+                    self.history_table.setItem(row, 2, QTableWidgetItem(formato_moneda_mx(efectivo_final)))
+                    self.history_table.setItem(row, 3, QTableWidgetItem(formato_moneda_mx(total_ventas)))
                     self.history_table.setItem(row, 4, QTableWidgetItem(usuario))
                 
         except Exception as e:
