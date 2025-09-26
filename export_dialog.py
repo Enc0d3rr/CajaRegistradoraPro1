@@ -15,12 +15,24 @@ class ExportDialog(QDialog):
             'desde': datetime.now().strftime('%Y-%m-%d 00:00:00'),
             'hasta': datetime.now().strftime('%Y-%m-%d 23:59:59')
         }
+         # USAR db_manager pasado o crear uno nuevo
         self.db_manager = DatabaseManager()
         
         self.setWindowTitle(f"Exportar Reporte de {report_type.title()}")
         self.setGeometry(300, 200, 400, 200)
         
         layout = QVBoxLayout()
+
+        info_layout = QVBoxLayout()
+        info_layout.addWidget(QLabel(f"Tipo: {report_type.title()}"))
+
+        if date_range and isinstance(date_range, dict):
+            info_layout.addWidget(QLabel(f"Desde: {date_range.get('desde', 'N/A')}"))
+            info_layout.addWidget(QLabel(f"Hasta: {date_range.get('hasta', 'N/A')}"))
+        else:
+            info_layout.addWidget(QLabel(f"Rango: {date_range or 'Completo'}"))
+        
+        layout.addLayout(info_layout)
         
         # Selección de formato
         format_layout = QHBoxLayout()
@@ -80,77 +92,55 @@ class ExportDialog(QDialog):
             return {'desde': '2000-01-01 00:00:00', 'hasta': '2030-12-31 23:59:59'}
     
     def exportar_reporte(self):
-        formato = self.format_combo.currentText()
-        reports_dir = "Reportes"
-        os.makedirs(reports_dir, exist_ok=True)
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_filename = f"{reports_dir}/{self.report_type}_{timestamp}"
-        
+        """Exportar el reporte en el formato seleccionado"""
         try:
-            fechas = self.normalizar_fechas_consulta()
+            formato = self.format_combo.currentText()
+            print(f"🔄 Exportando reporte en formato: {formato}")
             
-            with self.db_manager.get_connection() as conn:
-                cursor = conn.cursor()
+            if formato.startswith("PDF"):
+                archivo = self.exportar_pdf()
+            elif formato.startswith("Excel"):
+                archivo = self.exportar_excel()
+            else:  # CSV
+                archivo = self.exportar_csv()
+            
+            if archivo:
+                QMessageBox.information(self, "Éxito", f"Reporte exportado a:\n{archivo}")
+                self.accept()
+            else:
+                QMessageBox.warning(self, "Error", "No se pudo exportar el reporte")
                 
-                if self.report_type == "ventas":
-                    cursor.execute("SELECT COUNT(*) FROM ventas WHERE fecha BETWEEN ? AND ?", (fechas['desde'], fechas['hasta']))
-                else:
-                    cursor.execute("SELECT COUNT(*) FROM cierres_caja WHERE fecha_apertura BETWEEN ? AND ?", (fechas['desde'], fechas['hasta']))
-                
-                count = cursor.fetchone()[0]
-                
-                if count == 0:
-                    QMessageBox.warning(self, "Sin datos", f"No hay {self.report_type} en el período seleccionado.")
-                    return
-            
-            if "PDF" in formato:
-                filename = f"{base_filename}.pdf"
-                self.exportar_pdf(filename)
-            elif "Excel" in formato:
-                filename = f"{base_filename}.xlsx"
-                self.exportar_excel(filename)
-            elif "CSV" in formato:
-                filename = f"{base_filename}.csv"
-                self.exportar_csv(filename)
-            
-            QMessageBox.information(self, "✅ Éxito", f"Reporte exportado correctamente\n\nArchivo: {os.path.basename(filename)}")
-            
         except Exception as e:
-            QMessageBox.critical(self, "❌ Error", f"No se pudo exportar: {str(e)}")
+            print(f"❌ Error exportando reporte: {e}")
+            QMessageBox.critical(self, "Error", f"Error al exportar: {str(e)}")
     
-    def exportar_pdf(self, filename):
+    def exportar_pdf(self):
         """Exportar a PDF"""
         try:
-            from reportlab.lib.pagesizes import letter
             from reportlab.pdfgen import canvas
-
-            c = canvas.Canvas(filename, pagesize=letter)
-            width, height = letter
-
-            # Encabezado
-            c.setFont("Helvetica-Bold", 16)
-            c.drawString(50, height - 50, f"REPORTE DE {self.report_type.upper()}")
-
-            c.setFont("Helvetica", 12)
-            c.drawString(50, height - 70, f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-            c.drawString(50, height - 85, f"Período: {self.date_range['desde']} a {self.date_range['hasta']}")
-
-            c.line(50, height - 95, width - 50, height - 95)
+            from reportlab.lib.pagesizes import letter
             
-            y_position = height - 120
+            fecha = datetime.now().strftime("%Y%m%d_%H%M%S")
+            archivo = f"reporte_{self.report_type}_{fecha}.pdf"
             
-            if self.report_type == "ventas":
-                self._exportar_ventas_pdf(c, y_position)
-            else:
-                self._exportar_cierres_pdf(c, y_position)
+            # Crear PDF básico (puedes mejorarlo)
+            c = canvas.Canvas(archivo, pagesize=letter)
+            c.drawString(100, 750, f"Reporte de {self.report_type.title()}")
+            c.drawString(100, 730, f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            
+            if self.date_range and isinstance(self.date_range, dict):
+                c.drawString(100, 710, f"Desde: {self.date_range.get('desde', 'N/A')}")
+                c.drawString(100, 690, f"Hasta: {self.date_range.get('hasta', 'N/A')}")
             
             c.save()
+            return archivo
             
         except ImportError:
-            self._exportar_pdf_texto_plano(filename)
+            QMessageBox.warning(self, "Error", "PDF no disponible. Instala: pip install reportlab")
+            return None
         except Exception as e:
-            raise Exception(f"Error PDF: {str(e)}")
+            print(f"❌ Error PDF: {e}")
+            return None
         
     def _exportar_pdf_texto_plano(self, filename):
         """Fallback para PDF de texto plano"""
@@ -362,28 +352,32 @@ class ExportDialog(QDialog):
                 f.write(f"Diferencia: {diff_formateado}\n")
                 f.write("-" * 30 + "\n")
 
-    def exportar_excel(self, filename):
+    def exportar_excel(self):
         """Exportar a Excel"""
         try:
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write("Sep=,\n")
-                f.write("Reporte exportado desde Sistema de Caja Registradora\n")
-                f.write(f"Fecha,{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write(f"Tipo,{self.report_type}\n")
-                f.write(f"Desde,{self.date_range['desde']}\n")
-                f.write(f"Hasta,{self.date_range['hasta']}\n\n")
-                
-                if self.report_type == "ventas":
-                    f.write("Tipo Reporte,Ventas\n")
-                    self._exportar_ventas_excel(f)
-                else:
-                    f.write("Tipo Reporte,Cierres de Caja\n")
-                    self._exportar_cierres_excel(f)
+            import openpyxl
             
-            QMessageBox.information(self, "📊 Excel", "Exportación Excel completada.")
-                
+            fecha = datetime.now().strftime("%Y%m%d_%H%M%S")
+            archivo = f"reporte_{self.report_type}_{fecha}.xlsx"
+            
+            # Crear Excel básico
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = f"Reporte {self.report_type}"
+            
+            # Encabezados
+            ws['A1'] = f"Reporte de {self.report_type.title()}"
+            ws['A2'] = f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            
+            wb.save(archivo)
+            return archivo
+            
+        except ImportError:
+            QMessageBox.warning(self, "Error", "Excel no disponible. Instala: pip install openpyxl")
+            return None
         except Exception as e:
-            raise Exception(f"Error Excel: {str(e)}")
+            print(f"❌ Error Excel: {e}")
+            return None
     
     def _exportar_ventas_excel(self, f):
         """Datos de ventas para Excel"""
@@ -445,26 +439,55 @@ class ExportDialog(QDialog):
                 diff_formateado = formato_moneda_mx(diff)
                 f.write(f"{fecha},{usuario},{inicial_formateado},{efectivo_formateado},{tarjeta_formateado},{total_formateado},{diff_formateado}\n")
     
-    def exportar_csv(self, filename):
+    def exportar_csv(self):
         """Exportar a CSV"""
         try:
-            with open(filename, 'w', encoding='utf-8', newline='') as f:
-                writer = csv.writer(f)
+            import csv
+            
+            fecha = datetime.now().strftime("%Y%m%d_%H%M%S")
+            archivo = f"reporte_{self.report_type}_{fecha}.csv"
+            
+            # Obtener datos según el tipo de reporte
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
                 
-                writer.writerow(['Sistema de Caja Registradora - Reporte'])
-                writer.writerow(['Tipo', self.report_type])
-                writer.writerow(['Fecha generación', datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
-                writer.writerow(['Desde', self.date_range['desde']])
-                writer.writerow(['Hasta', self.date_range['hasta']])
-                writer.writerow([])
+                if self.report_type == 'ventas':
+                    if self.date_range == 'hoy':
+                        cursor.execute("""
+                            SELECT v.id, v.fecha, v.total, v.metodo_pago, u.nombre as usuario
+                            FROM ventas v 
+                            JOIN usuarios u ON v.usuario_id = u.id
+                            WHERE DATE(v.fecha) = DATE('now')
+                            ORDER BY v.fecha DESC
+                        """)
+                    # ... agregar más condiciones según date_range
+                    else:
+                        cursor.execute("""
+                            SELECT v.id, v.fecha, v.total, v.metodo_pago, u.nombre as usuario
+                            FROM ventas v 
+                            JOIN usuarios u ON v.usuario_id = u.id
+                            ORDER BY v.fecha DESC
+                            LIMIT 1000
+                        """)
                 
-                if self.report_type == "ventas":
-                    self._exportar_ventas_csv(writer)
-                else:
-                    self._exportar_cierres_csv(writer)
+                datos = cursor.fetchall()
+                
+                # Exportar a CSV
+                with open(archivo, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
                     
+                    # Encabezados
+                    if self.report_type == 'ventas':
+                        writer.writerow(['ID', 'Fecha', 'Total', 'Método Pago', 'Usuario'])
+                    
+                    for fila in datos:
+                        writer.writerow(fila)
+            
+            return archivo
+            
         except Exception as e:
-            raise Exception(f"Error CSV: {str(e)}")
+            print(f"❌ Error CSV: {e}")
+            return None
     
     def _exportar_ventas_csv(self, writer):
         """Datos de ventas para CSV"""

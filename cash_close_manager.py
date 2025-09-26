@@ -218,15 +218,20 @@ class CashCloseManagerDialog(QDialog):
         self.calcular_totales_cierre(fecha_desde, fecha_hasta)
 
     def exportar_reporte(self):
-        """Abre diálogo de exportación para cierres"""
+        """Abre diálogo de exportación para cierres - CORREGIDO"""
         from export_dialog import ExportDialog
-    
+
         date_range = {
             'desde': self.date_from.date().toString("yyyy-MM-dd"),
             'hasta': self.date_to.date().toString("yyyy-MM-dd")
         }
-    
-        dialog = ExportDialog(self.db_manager, 'cierres', date_range, self)
+
+        # CORREGIR ORDEN DE PARÁMETROS
+        dialog = ExportDialog(
+            parent=self,                    # primer parámetro
+            report_type='cierres',          # segundo parámetro  
+            date_range=date_range           # tercer parámetro
+        )
         dialog.exec()
     
     def cargar_ventas(self, fecha_desde, fecha_hasta):
@@ -239,11 +244,14 @@ class CashCloseManagerDialog(QDialog):
                 WHERE v.fecha BETWEEN ? AND ?
                 ORDER BY v.fecha DESC
             """, (fecha_desde, fecha_hasta))
-            
+        
             ventas = cursor.fetchall()
-            
+        
             self.sales_table.setRowCount(len(ventas))
             for row, (id_, fecha, total, iva, metodo_pago, usuario) in enumerate(ventas):
+                # CORREGIR: LLENAR TODAS LAS COLUMNAS, NO SOLO LAS ÚLTIMAS
+                self.sales_table.setItem(row, 0, QTableWidgetItem(str(id_)))  # 🔥 COLUMNA 0: ID
+                self.sales_table.setItem(row, 1, QTableWidgetItem(str(fecha)))  # 🔥 COLUMNA 1: FECHA
                 total_formateado = formato_moneda_mx(total)
                 iva_formateado = formato_moneda_mx(iva)
                 self.sales_table.setItem(row, 2, QTableWidgetItem(total_formateado))
@@ -391,12 +399,12 @@ class CashCloseManagerDialog(QDialog):
         try:
             with self.db_manager.get_connection() as conn:
                 cursor = conn.cursor()
-            
+        
                 # Primero verificar qué columnas existen realmente
                 cursor.execute("PRAGMA table_info(cierres_caja)")
                 columnas = [col[1] for col in cursor.fetchall()]
                 print("Columnas disponibles en cierres_caja:", columnas)
-            
+        
                 # Usar solo columnas que sabemos que existen
                 if 'fecha_cierre' in columnas and 'fecha_apertura' in columnas:
                     cursor.execute("""
@@ -425,18 +433,24 @@ class CashCloseManagerDialog(QDialog):
                         ORDER BY c.fecha_apertura DESC
                         LIMIT 20
                     """)
-            
+        
                 cierres = cursor.fetchall()
-            
+        
                 self.history_table.setRowCount(len(cierres))
                 for row, (fecha, monto_inicial, efectivo_final, total_ventas, usuario) in enumerate(cierres):
-
-                    self.history_table.setItem(row, 0, QTableWidgetItem(str(fecha)))
+                    # MEJORAR FORMATO DE FECHA
+                    if fecha:
+                        # Convertir a string y tomar solo la parte de la fecha
+                        fecha_str = str(fecha).split(' ')[0] if ' ' in str(fecha) else str(fecha)
+                    else:
+                        fecha_str = "N/A"
+                
+                    self.history_table.setItem(row, 0, QTableWidgetItem(fecha_str))
                     self.history_table.setItem(row, 1, QTableWidgetItem(formato_moneda_mx(monto_inicial)))
                     self.history_table.setItem(row, 2, QTableWidgetItem(formato_moneda_mx(efectivo_final)))
                     self.history_table.setItem(row, 3, QTableWidgetItem(formato_moneda_mx(total_ventas)))
                     self.history_table.setItem(row, 4, QTableWidgetItem(usuario))
-                
+            
         except Exception as e:
             print(f"Error cargando historial de cierres: {e}")
             QMessageBox.warning(self, "Error", f"No se pudo cargar el historial: {str(e)}")

@@ -24,7 +24,28 @@ from config_panel import ConfigPanelDialog
 from config_manager import config_manager
 from themes import obtener_tema
 from utils.helpers import formato_moneda_mx
-from licencias_manager import LicenseManager
+from licenses.licencias_manager import LicenseManager
+from licenses.dialogo_activacion import DialogoActivacion
+
+# Agregar el directorio licenses al path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+licenses_dir = os.path.join(current_dir, 'licenses')
+if os.path.exists(licenses_dir):
+    sys.path.append(licenses_dir)
+
+try:
+    from licencias_manager import LicenseManager
+    from dialogo_activacion import DialogoActivacion
+    print("✅ Módulos de licencias cargados correctamente")
+except ImportError as e:
+    print(f"❌ Error cargando módulos de licencias: {e}")
+    # Fallback: intentar importar directamente
+    try:
+        from licenses.licencias_manager import LicenseManager
+        from licenses.dialogo_activacion import DialogoActivacion
+        print("✅ Módulos cargados desde subdirectorio licenses/")
+    except ImportError:
+        print("❌ No se pudieron cargar los módulos de licencias")
 
 # Detección de plataforma
 def es_windows():
@@ -74,6 +95,8 @@ class CajaGUI(QWidget):
         # Inicializar interfaz
         self.init_ui()
         self.aplicar_tema()
+
+        self.actualizar_barra_estado_licencia()
 
     def guardar_configuracion_actualizada(self):
         """Asegurar que la configuración tenga todas las claves necesarias"""
@@ -541,6 +564,18 @@ class CajaGUI(QWidget):
         QMessageBox.information(self, "Venta cancelada", "Carrito vacío.")
 
     def finalizar_venta(self):
+         # VERIFICAR LICENCIA DEMO ANTES DE VENDER
+        if self.license_manager.tipo_licencia == "demo":
+            ventas_realizadas = self.license_manager.config_demo["ventas_realizadas"]
+            if ventas_realizadas >= self.license_manager.limite_ventas_demo:
+                QMessageBox.warning(
+                    self, 
+                    "Límite Demo Alcanzado",
+                    f"⚠️ Ha alcanzado el límite de {self.license_manager.limite_ventas_demo} ventas.\n\n"
+                    "💎 Para continuar vendiendo, active una licencia premium."
+                )
+                return
+            
         if not self.carrito:
             QMessageBox.warning(self, "Error", "No hay productos en el carrito.")
             return
@@ -578,6 +613,24 @@ class CajaGUI(QWidget):
         total_formateado = formato_moneda_mx(total)
         QMessageBox.information(self, "Venta finalizada", 
                                 f"Total: {total_formateado}\nMétodo: {metodo_pago}\nTicket: {ticket_path}")
+        
+        # REGISTRAR VENTA EN EL CONTADOR DEMO (DESPUÉS DE LA VENTA EXITOSA)
+        self.license_manager.registrar_venta()
+    
+        # ACTUALIZAR BARRA DE ESTADO
+        self.actualizar_barra_estado_licencia()
+    
+        # VERIFICAR SI SE ALCANZÓ EL LÍMITE DESPUÉS DE ESTA VENTA
+        if not self.license_manager.validar_licencia():
+            # Mostrar opciones en lugar de cerrar inmediatamente
+            if self.mostrar_opciones_licencia_expirada():
+                # Si el usuario activó una licencia, continuar
+                print("✅ Licencia activada, continuando...")
+            else:
+                # Si el usuario eligió cerrar, salir
+                QMessageBox.information(self, "Información", "La aplicación se cerrará.")
+                self.close()
+                return
 
     def actualizar_resumen_inventario(self):
         with self.db_manager.get_connection() as conn:
@@ -610,142 +663,280 @@ class CajaGUI(QWidget):
 • N° de ventas: {count}""")
 
 # ==== SECCION DE LICENSIA ===
-    # caja_registradora.py - CORREGIR ESTE MÉTODO
 
     def verificar_licencia(self):
-        """Verifica licencia premium - NO PRUEBAS AUTOMÁTICAS"""
+        """Verifica licencia - CON MEJORES MENSAJES"""
         try:
-            from PyQt6.QtWidgets import QDialog, QMessageBox
+            print("🔍 Verificando licencia...")
         
-            print("🔍 Verificando licencia premium...")
-        
-            # Validar licencia (NO activará pruebas automáticas)
             if not self.license_manager.validar_licencia():
-                print("❌ Licencia premium no válida o no activada.")
-            
-                # Mostrar diálogo de activación
-                resultado = self.license_manager.mostrar_dialogo_activacion()
-            
-                # Si el usuario no activó la licencia, cerrar aplicación
-                if resultado != QDialog.DialogCode.Accepted:
-                    QMessageBox.warning(
-                        self,
-                        "Licencia Premium Requerida", 
-                        "💎 Para usar el software necesitas una licencia premium válida.\n\n"
-                        "📞 Contáctanos para adquirir tu licencia:\n"
-                        "📧 ventas@cajaregistradora.com\n"
-                        "📱 +52 55 1234 5678\n\n"
-                        "La aplicación se cerrará."
-                    )
-                    return False
-            
-                # Verificar nuevamente después de la activación
-                if not self.license_manager.validar_licencia():
-                    QMessageBox.warning(self, "Error", "No se pudo activar la licencia.")
-                    return False
+                print("❌ Licencia no válida.")
+                return self.mostrar_opciones_licencia_expirada()
         
-            print("✅ Licencia premium válida.")
+            # Mostrar información según el tipo
             info = self.license_manager.obtener_info_licencia()
-            print(f"📊 Información de licencia: {info}")
+            if self.license_manager.tipo_licencia == "demo":
+                QMessageBox.information(
+                    self,
+                    "Versión Demo Activada",
+                    f"🔬 BIENVENIDO A LA VERSIÓN DE PRUEBA\n\n"
+                    f"Ventas restantes: {info['dias_restantes']}\n"
+                    f"Límite total: {self.license_manager.limite_ventas_demo} ventas\n\n"
+                    f"💎 Para uso ilimitado, active una licencia premium."
+                )
+            else:
+                QMessageBox.information(
+                    self,
+                    "Licencia Premium",
+                    f"💎 LICENCIA PREMIUM ACTIVA\n\n"
+                    f"Días restantes: {info['dias_restantes']}\n"
+                    f"Expira: {info['expiracion']}\n\n"
+                    f"¡Disfrute de todas las funciones!"
+                )
         
+            print("✅ Licencia válida.")
+            self.actualizar_barra_estado_licencia()
             return True
         
         except Exception as e:
-            print(f"❌ Error crítico en verificar_licencia: {e}")
-            QMessageBox.critical(
-                self,
-                "Error del Sistema",
-                f"Error al verificar la licencia:\n{str(e)}\n\n"
-                "La aplicación se cerrará."
-            )
+            print(f"❌ Error en verificar_licencia: {e}")
+            QMessageBox.critical(self, "Error", "Error al verificar licencia")
             return False
 
+    def mostrar_opciones_licencia_expirada(self):
+        """Muestra opciones cuando la licencia demo expira"""
+        from PyQt6.QtWidgets import QMessageBox, QPushButton
+    
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Límite Demo Alcanzado")
+        msg_box.setIcon(QMessageBox.Icon.Warning)
+    
+        # Mensaje según el tipo de problema
+        if self.license_manager.tipo_licencia == "demo":
+            mensaje = f"""
+            ⚠️ HA ALCANZADO EL LÍMITE DE {self.license_manager.limite_ventas_demo} VENTAS
+        
+            La versión demo ha expirado. Para continuar usando el software:
+        
+            💎 **Opciones disponibles:**
+            • Activar una licencia premium (uso ilimitado)
+            • Contactar para adquirir una licencia
+            • Cerrar la aplicación
+        
+            📞 **Contacto:**
+            📧 ventas@cajaregistradora.com
+            📱 +52 55 1234 5678
+        """
+        else:
+            mensaje = """
+            ⚠️ LICENCIA REQUERIDA
+        
+            Para usar el software necesita una licencia válida.
+        
+            💎 **Opciones disponibles:**
+            • Activar una licencia premium
+            • Contactar para adquirir una licencia  
+            • Cerrar la aplicación
+        
+            📞 **Contacto:**
+            📧 ventas@cajaregistradora.com
+            📱 +52 55 1234 5678
+            """
+    
+        msg_box.setText(mensaje)
+    
+        # Botones personalizados
+        btn_activar = QPushButton("🎫 Activar Licencia Premium")
+        btn_contacto = QPushButton("📞 Ver Información de Contacto")
+        btn_cerrar = QPushButton("❌ Cerrar Aplicación")
+    
+        msg_box.addButton(btn_activar, QMessageBox.ButtonRole.ActionRole)
+        msg_box.addButton(btn_contacto, QMessageBox.ButtonRole.ActionRole)
+        msg_box.addButton(btn_cerrar, QMessageBox.ButtonRole.RejectRole)
+    
+        msg_box.exec()
+    
+        boton_presionado = msg_box.clickedButton()
+    
+        if boton_presionado == btn_activar:
+            print("🎫 Usuario eligió activar licencia")
+            if self.mostrar_activacion():
+                # Si la activación fue exitosa, verificar nuevamente
+                if self.license_manager.validar_licencia():
+                    QMessageBox.information(self, "✅ Éxito", "Licencia activada correctamente!")
+                    self.actualizar_barra_estado_licencia()
+                    return True
+                else:
+                    QMessageBox.warning(self, "Error", "No se pudo activar la licencia")
+                    return False
+            else:
+                return False
+            
+        elif boton_presionado == btn_contacto:
+            print("📞 Usuario eligió ver contacto")
+            self.mostrar_informacion_contacto()
+            # Después de ver contacto, volver a mostrar opciones
+            return self.mostrar_opciones_licencia_expirada()
+        
+        else:  # btn_cerrar
+            print("❌ Usuario eligió cerrar aplicación")
+            return False
+        
+    def actualizar_barra_estado_licencia(self):
+        """Actualiza la barra de estado con información de la licencia"""
+        try:
+            info = self.license_manager.obtener_info_licencia()
+        
+            if self.license_manager.tipo_licencia == "premium":
+                texto = "💎 LICENCIA PREMIUM"
+                estilo = "background-color: #d4edda; color: #155724; font-weight: bold; padding: 5px; border-radius: 3px;"
+                tooltip = "Licencia premium activa - Ventas ilimitadas"
+            else:
+                ventas_restantes = self.license_manager.limite_ventas_demo - self.license_manager.config_demo["ventas_realizadas"]
+                texto = f"🔬 DEMO - {ventas_restantes} ventas restantes"
+                estilo = "background-color: #fff3cd; color: #856404; font-weight: bold; padding: 5px; border-radius: 3px;"
+                tooltip = f"Versión demo - Límite: {self.license_manager.limite_ventas_demo} ventas"
+        
+            # Crear o actualizar barra de estado
+            if not hasattr(self, 'licencia_status_label'):
+                self.licencia_status_label = QLabel()
+                self.licencia_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                # Agregar al header layout
+                header_layout = self.findChild(QHBoxLayout)  # Ajusta según tu estructura
+                if header_layout:
+                    header_layout.addWidget(self.licencia_status_label)
+        
+            self.licencia_status_label.setText(texto)
+            self.licencia_status_label.setStyleSheet(estilo)
+            self.licencia_status_label.setToolTip(tooltip)
+        
+        except Exception as e:
+            print(f"❌ Error actualizando barra de estado: {e}")
+
     def mostrar_estado_licencia(self):
-        """Muestra estado de licencia - VERSIÓN CORREGIDA"""
+        """Muestra estado de licencia - VERSIÓN MEJORADA CON DEMO"""
         try:
             from PyQt6.QtWidgets import QMessageBox, QPushButton
-        
+    
             info = self.license_manager.obtener_info_licencia()
-            print(f"📊 Info licencia: {info}")
+            tipo_licencia = self.license_manager.tipo_licencia
         
             # Crear mensaje según el tipo de licencia
             if info['estado'] == 'activa':
-                if info['tipo'] == 'prueba':
-                    mensaje = f"✅ LICENCIA DE PRUEBA ACTIVA\n\nDías restantes: {info['dias_restantes']}"
-                elif info['tipo'] == 'paga':
-                    mensaje = f"💎 LICENCIA PREMIUM ACTIVA\n\nDías restantes: {info['dias_restantes']}"
-                else:
-                    mensaje = f"📄 LICENCIA ACTIVA\n\nTipo: {info['tipo']}\nDías: {info['dias_restantes']}"
+                if tipo_licencia == 'premium':
+                    mensaje = f"💎 LICENCIA PREMIUM ACTIVA\n\nCaracterísticas:\n• Ventas ilimitadas\n• Sin restricciones\n• Soporte prioritario"
+                else:  # demo
+                    mensaje = f"🔬 VERSIÓN DEMO ACTIVA\n\nVentas restantes: {info['dias_restantes']}\nLímite total: {self.license_manager.limite_ventas_demo} ventas"
             else:
                 mensaje = "❌ LICENCIA EXPIRADA O NO VÁLIDA"
-        
-            # CREAR MessageBox PERSONALIZADO
+    
+            # Crear MessageBox personalizado
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle("Estado de Licencia")
             msg_box.setText(mensaje)
-        
-            # AÑADIR BOTONES PERSONALIZADOS
-            btn_activar = QPushButton("🎫 Activar Licencia")
-            btn_validar = QPushButton("🔄 Validar")
+    
+            # Añadir botones personalizados
+            btn_activar = QPushButton("🎫 Activar Licencia Premium")
+            btn_validar = QPushButton("🔄 Validar Estado")
             btn_cerrar = QPushButton("Cerrar")
-        
+    
             msg_box.addButton(btn_activar, QMessageBox.ButtonRole.ActionRole)
             msg_box.addButton(btn_validar, QMessageBox.ButtonRole.ActionRole)
             msg_box.addButton(btn_cerrar, QMessageBox.ButtonRole.RejectRole)
-        
-            # EJECUTAR Y CAPTURAR RESPUESTA
+    
+            # Ejecutar y capturar respuesta
             msg_box.exec()
-        
-            # VER QUÉ BOTÓN SE PRESIONÓ
+    
+            # Ver qué botón se presionó
             boton_presionado = msg_box.clickedButton()
-        
+    
             if boton_presionado == btn_activar:
                 print("🎫 Usuario eligió: Activar Licencia")
                 self.mostrar_activacion()
             elif boton_presionado == btn_validar:
                 print("🔄 Usuario eligió: Validar")
-                self.validar_licencia()
+                self.validar_licencia_simple()
             else:
                 print("❌ Usuario cerró el diálogo")
-            
+        
         except Exception as e:
             print(f"❌ Error en mostrar_estado_licencia: {e}")
-            # FALLBACK SIMPLE
             QMessageBox.information(self, "Licencia", "Estado: Activada")
 
     def mostrar_activacion(self):
-        """Muestra diálogo de activación - VERSIÓN CORREGIDA"""
+        """Muestra diálogo de activación mejorado"""
         try:
-            from dialogo_activacion import DialogoActivacion
-            print("🎫 Abriendo diálogo de activación...")
+            from licenses.dialogo_activacion import DialogoActivacion
         
-            # PASAR SOLO LOS PARÁMETROS NECESARIOS
-            dialogo = DialogoActivacion(self.license_manager, self)
+            # PASAR EL TEMA ACTUAL AL DIÁLOGO
+            tema_actual = self.config.get('tema', 'claro')
+            dialogo = DialogoActivacion(self.license_manager, self, tema_actual)
+        
             resultado = dialogo.exec()
         
-            print(f"📝 Diálogo de activación cerrado. Resultado: {resultado}")
-        
-            # ACTUALIZAR ESTADO DESPUÉS DE LA ACTIVACIÓN
-            if resultado == 1:  # Accepted
-                info = self.license_manager.obtener_info_licencia()
-                print(f"🎉 Licencia activada: {info}")
-                QMessageBox.information(self, "✅ Éxito", "Licencia activada correctamente!")
+            if resultado == QDialog.DialogCode.Accepted:
+                # Verificar si la activación fue exitosa
+                if self.license_manager.validar_licencia():
+                    info = self.license_manager.obtener_info_licencia()
+                    QMessageBox.information(
+                        self, 
+                        "✅ Activación Exitosa",
+                        f"Licencia premium activada correctamente!\n\n"
+                        f"Válida por: {info['dias_restantes']} días\n"
+                        f"Expira: {info['expiracion']}"
+                    )
+                    self.actualizar_barra_estado_licencia()
+                    return True
+                else:
+                    QMessageBox.warning(self, "Error", "La activación no fue exitosa")
+                    return False
+            return False
             
         except Exception as e:
             print(f"❌ Error en mostrar_activacion: {e}")
             QMessageBox.warning(self, "Error", "No se pudo abrir el diálogo de activación")
+            return False
+        
+    def mostrar_informacion_contacto(self):
+        """Muestra información de contacto detallada"""
+        mensaje = """
+        💎 **INFORMACIÓN DE CONTACTO - LICENCIAS PREMIUM**
+    
+        Para adquirir una licencia premium y desbloquear todas las funciones:
+    
+        📧 **Email:** ventas@cajaregistradora.com
+        📱 **Teléfono:** +52 55 1234 5678
+        🌐 **Sitio web:** www.cajaregistradora.com
+    
+        💰 **Beneficios de la licencia premium:**
+        • Ventas ilimitadas
+        • Sin restricciones de tiempo
+        • Soporte técnico prioritario
+        • Actualizaciones gratuitas
+        • Múltiples usuarios
+    
+        ⏰ **Horario de atención:**
+        Lunes a Viernes: 8:00 AM - 5:00 PM
+    
+        ¡Estamos para servirle!
+        """
+    
+        QMessageBox.information(self, "Información de Contacto", mensaje)
 
-    def validar_licencia(self):
+    def validar_licencia_simple(self):
         """Valida la licencia - VERSIÓN SIMPLE"""
         try:
             if self.license_manager.validar_licencia():
-                QMessageBox.information(self, "✅ Válida", "La licencia es válida y activa.")
+                info = self.license_manager.obtener_info_licencia()
+                if self.license_manager.tipo_licencia == "premium":
+                    QMessageBox.information(self, "✅ Válida", "Licencia premium activa y válida.")
+                else:
+                    QMessageBox.information(self, "🔬 Demo", f"Versión demo activa. {info['mensaje']}")
             else:
-                QMessageBox.warning(self, "❌ Inválida", "La licencia no es válida.")
+                QMessageBox.warning(self, "❌ Inválida", "La licencia no es válida o ha expirado.")
         except Exception as e:
             print(f"Error en validar_licencia: {e}")
             QMessageBox.warning(self, "Error", "Error al validar la licencia")
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

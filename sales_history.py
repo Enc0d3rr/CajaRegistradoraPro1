@@ -12,7 +12,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import numpy as np
 
-# ✅ Importar el diálogo de exportación
+# Importar el diálogo de exportación
 from export_dialog import ExportDialog
 
 from utils.helpers import formato_moneda_mx
@@ -23,6 +23,11 @@ class SalesHistoryDialog(QDialog):
         self.db_manager = db_manager
         self.setWindowTitle("Historial y Análisis de Ventas")
         self.setGeometry(100, 50, 1200, 800)
+
+        self.date_range = {
+            'desde': QDate.currentDate().addDays(-30).toString("yyyy-MM-dd"),
+            'hasta': QDate.currentDate().toString("yyyy-MM-dd")
+        }
         
         # Estilo de la ventana
         palette = self.palette()
@@ -167,7 +172,7 @@ class SalesHistoryDialog(QDialog):
         self.figure1 = Figure(figsize=(8, 5))  # Reducido para mejor ajuste
         self.canvas1 = FigureCanvas(self.figure1)
         
-        # ✅ CONFIGURACIÓN PARA LA PRIMERA GRÁFICA
+        # CONFIGURACIÓN PARA LA PRIMERA GRÁFICA
         self.canvas1.setMinimumSize(350, 300)
         self.canvas1.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
@@ -182,7 +187,7 @@ class SalesHistoryDialog(QDialog):
         self.figure2 = Figure(figsize=(8, 5))  # Reducido para mejor ajuste
         self.canvas2 = FigureCanvas(self.figure2)
         
-        # ✅ CONFIGURACIÓN PARA LA SEGUNDA GRÁFICA
+        # CONFIGURACIÓN PARA LA SEGUNDA GRÁFICA
         self.canvas2.setMinimumSize(350, 300)
         self.canvas2.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
@@ -191,11 +196,11 @@ class SalesHistoryDialog(QDialog):
         chart2_group.setMinimumHeight(350)  # Altura mínima del grupo
         charts_layout.addWidget(chart2_group)
         
-        # ✅ CONFIGURACIÓN FINAL DEL LAYOUT
+        # CONFIGURACIÓN FINAL DEL LAYOUT
         charts_layout.setStretchFactor(chart1_group, 1)  # Ambas gráficas se expanden igual
         charts_layout.setStretchFactor(chart2_group, 1)
 
-        # ✅ GENERAR GRÁFICOS CON FECHAS POR DEFECTO al abrir la ventana
+        # GENERAR GRÁFICOS CON FECHAS POR DEFECTO al abrir la ventana
         fecha_hasta = datetime.now().strftime('%Y-%m-%d')
         fecha_desde = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
         self.generar_graficos(fecha_desde, fecha_hasta)
@@ -213,6 +218,12 @@ class SalesHistoryDialog(QDialog):
     def cargar_ventas(self):
         fecha_desde = self.date_from.date().toString("yyyy-MM-dd")
         fecha_hasta = self.date_to.date().toString("yyyy-MM-dd 23:59:59")
+
+        self.date_range = {
+            'desde': fecha_desde,
+            'hasta': fecha_hasta.split()[0]  # Solo la fecha, sin la hora
+        }
+
         metodo = self.combo_metodo.currentText()
         usuario_info = self.combo_usuario.currentData()
         
@@ -301,7 +312,7 @@ class SalesHistoryDialog(QDialog):
             
             datos = cursor.fetchall()
             
-        # ✅ CORRECCIÓN: Convertir fechas a strings para matplotlib
+        # CORRECCIÓN: Convertir fechas a strings para matplotlib
         fechas = [str(d[0]) for d in datos]  # Convertir a string
         totales = [float(d[1]) for d in datos]  # Asegurar que sean floats
         cantidades = [d[2] for d in datos]
@@ -309,27 +320,27 @@ class SalesHistoryDialog(QDialog):
         self.figure1.clear()
         ax1 = self.figure1.add_subplot(111)
         
-        # ✅ VERIFICAR SI HAY DATOS
+        # VERIFICAR SI HAY DATOS
         if not datos:
             ax1.text(0.5, 0.5, 'No hay datos en el período seleccionado', 
                     ha='center', va='center', transform=ax1.transAxes, fontsize=12)
             ax1.set_title('Ventas por Día - Sin Datos')
         else:
-            # ✅ USAR ÍNDICES NUMÉRICOS para las barras
+            # USAR ÍNDICES NUMÉRICOS para las barras
             indices = range(len(fechas))
             bars = ax1.bar(indices, totales, color='skyblue', alpha=0.7, width=0.6)
             ax1.set_title('Ventas por Día')
             ax1.set_xlabel('Fecha')
             ax1.set_ylabel('Total Ventas ($)')
             
-            # ✅ CONFIGURAR ETIQUETAS EN EL EJE X
+            # CONFIGURAR ETIQUETAS EN EL EJE X
             ax1.set_xticks(indices)
             ax1.set_xticklabels(fechas, rotation=45, ha='right')
             
-            # ✅ AJUSTAR MÁRGENES para que quepan las etiquetas
+            # AJUSTAR MÁRGENES para que quepan las etiquetas
             self.figure1.tight_layout()
             
-            # ✅ AÑADIR VALORES EN LAS BARRAS
+            # AÑADIR VALORES EN LAS BARRAS
             for bar in bars:
                 height = bar.get_height()
                 ax1.text(bar.get_x() + bar.get_width()/2., height,
@@ -353,7 +364,7 @@ class SalesHistoryDialog(QDialog):
         self.figure2.clear()
         ax2 = self.figure2.add_subplot(111)
         
-        # ✅ VERIFICAR SI HAY DATOS
+        # VERIFICAR SI HAY DATOS
         if not metodos_data:
             ax2.text(0.5, 0.5, 'No hay datos de métodos de pago', 
                     ha='center', va='center', transform=ax2.transAxes, fontsize=12)
@@ -362,15 +373,15 @@ class SalesHistoryDialog(QDialog):
             metodos = [d[0] for d in metodos_data]
             totals = [float(d[1]) for d in metodos_data]  # Asegurar floats
             
-            # ✅ MÁS COLORES PARA MÁS MÉTODOS DE PAGO
+            # MÁS COLORES PARA MÁS MÉTODOS DE PAGO
             colors = ['#ff9999', '#66b3ff', '#99ff99', '#ffcc99', '#c2c2f0', '#ffb3e6']
             wedges, texts, autotexts = ax2.pie(totals, labels=metodos, autopct='%1.1f%%', 
                                               colors=colors[:len(metodos)], startangle=90)
             
-            # ✅ MEJORAR ESTILO DEL GRÁFICO CIRCULAR
+            # MEJORAR ESTILO DEL GRÁFICO CIRCULAR
             ax2.set_title('Distribución por Método de Pago')
             
-            # ✅ HACER LOS PORCENTAJES MÁS LEGIBLES
+            # HACER LOS PORCENTAJES MÁS LEGIBLES
             for autotext in autotexts:
                 autotext.set_color('white')
                 autotext.set_fontweight('bold')
@@ -435,11 +446,30 @@ class SalesHistoryDialog(QDialog):
     
     # Exportar reporte
     def exportar_reporte(self):
-        """Abre el diálogo de exportación para ventas"""
-        date_range = {
-            'desde': self.date_from.date().toString("yyyy-MM-dd"),
-            'hasta': self.date_to.date().toString("yyyy-MM-dd")
-        }
+        """Exportar reporte de ventas - VERSIÓN CORREGIDA Y ROBUSTA"""
+        try:
+            # VERIFICACIÓN ROBUSTA DE date_range
+            if not hasattr(self, 'date_range') or self.date_range is None:
+             # Si no existe, crear uno con las fechas actuales de los date edits
+                fecha_desde = self.date_from.date().toString("yyyy-MM-dd")
+                fecha_hasta = self.date_to.date().toString("yyyy-MM-dd")
+                self.date_range = {
+                    'desde': fecha_desde,
+                    'hasta': fecha_hasta
+                }
+                print(f"⚠️ date_range no existía, creado: {self.date_range}")
         
-        dialog = ExportDialog(self.db_manager, 'ventas', date_range, self)
-        dialog.exec()
+            print(f"📊 Exportando reporte para rango: {self.date_range}")
+        
+            # CORRECCIÓN DEL ORDEN DE PARÁMETROS
+            dialog = ExportDialog(
+                parent=self,                    # primer parámetro
+                report_type='ventas',           # segundo parámetro  
+                date_range=self.date_range      # tercer parámetro
+            )
+        
+            dialog.exec()
+        
+        except Exception as e:
+            print(f"❌ Error en exportar_reporte: {e}")
+            QMessageBox.critical(self, "Error", f"No se pudo exportar el reporte: {str(e)}")
