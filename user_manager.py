@@ -10,7 +10,7 @@ class UserManagerDialog(QDialog):
     def __init__(self, db_manager, user_id=None, parent=None):
         super().__init__(parent)
         self.db_manager = db_manager
-        self.user_id = user_id  # ✅ Para edición
+        self.user_id = user_id  # Para edición
         self.setWindowTitle("Gestión de Usuarios")
         self.setGeometry(200, 100, 800, 600)
         
@@ -87,7 +87,7 @@ class UserManagerDialog(QDialog):
         self.cargar_usuarios()
         self.limpiar_formulario()
         
-        # ✅ CARGAR USUARIO SI SE PROVEE user_id (PARA EDICIÓN)
+        # CARGAR USUARIO SI SE PROVEE user_id (PARA EDICIÓN)
         if self.user_id:
             self.cargar_usuario_existente()
     
@@ -165,7 +165,7 @@ class UserManagerDialog(QDialog):
             QMessageBox.warning(self, "Error", "Usuario y nombre son obligatorios")
             return
         
-        # ✅ VALIDACIÓN DIFERENTE PARA NUEVOS VS EDITAR
+        # VALIDACIÓN DIFERENTE PARA NUEVOS VS EDITAR
         if not self.user_id and not password:  # Solo para nuevos usuarios
             QMessageBox.warning(self, "Error", "La contraseña es obligatoria para nuevos usuarios")
             return
@@ -179,7 +179,7 @@ class UserManagerDialog(QDialog):
                 cursor = conn.cursor()
                 
                 if self.user_id:
-                    # ✅ EDITAR usuario existente
+                    # EDITAR usuario existente
                     if password:
                         cursor.execute(
                             "UPDATE usuarios SET nombre = ?, rol = ?, password = ? WHERE id = ?",

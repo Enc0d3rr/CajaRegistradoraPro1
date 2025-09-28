@@ -33,19 +33,20 @@ licenses_dir = os.path.join(current_dir, 'licenses')
 if os.path.exists(licenses_dir):
     sys.path.append(licenses_dir)
 
+# IMPORTACIÓN CORRECTA PARA LICENCIAS
 try:
-    from licencias_manager import LicenseManager
-    from dialogo_activacion import DialogoActivacion
-    print("✅ Módulos de licencias cargados correctamente")
+    from licenses.dialogo_activacion import LicenciaActivationDialog
+    print("✅ LicenciaActivationDialog importado correctamente")
 except ImportError as e:
-    print(f"❌ Error cargando módulos de licencias: {e}")
-    # Fallback: intentar importar directamente
-    try:
-        from licenses.licencias_manager import LicenseManager
-        from licenses.dialogo_activacion import DialogoActivacion
-        print("✅ Módulos cargados desde subdirectorio licenses/")
-    except ImportError:
-        print("❌ No se pudieron cargar los módulos de licencias")
+    print(f"❌ Error importando LicenciaActivationDialog: {e}")
+    # Fallback temporal
+    class LicenciaActivationDialog(QDialog):
+        def __init__(self, license_manager, parent=None):
+            super().__init__(parent)
+            self.setWindowTitle("Activación de Licencia - Error")
+            layout = QVBoxLayout()
+            layout.addWidget(QLabel("Error: Diálogo de activación no disponible"))
+            self.setLayout(layout)
 
 # Detección de plataforma
 def es_windows():
@@ -69,7 +70,7 @@ class CajaGUI(QWidget):
 
         # VERIFICAR LICENCIA AL INICIAR 
         if not self.verificar_licencia():
-            # Si la licencia no es válida, cerrar aplicación
+            print("❌ Licencia no válida, cerrando aplicación")
             sys.exit(1)
 
         self.db_manager = DatabaseManager()
@@ -78,24 +79,24 @@ class CajaGUI(QWidget):
 
         # Registrar guardado al cerrar
         atexit.register(self.guardar_configuracion_al_cerrar)
-        
-        # Cargar y verificar configuración
+
+         # Cargar y verificar configuración
         self.cargar_configuracion()
         self.guardar_configuracion_actualizada()
 
-        # Autenticar usuario
+        # AUTENTICAR USUARIO
         self.autenticar_usuario()
         
-        if not hasattr(self, 'current_user'):
-            print("❌ No se pudo autenticar usuario")
-            sys.exit()
+        # VERIFICACIÓN FINAL
+        if not hasattr(self, 'current_user') or self.current_user is None:
+            print("❌ No se pudo autenticar usuario - Cerrando aplicación")
+            sys.exit(1)
 
         print(f"✅ Usuario autenticado: {self.current_user['nombre']}")
             
         # Inicializar interfaz
         self.init_ui()
         self.aplicar_tema()
-
         self.actualizar_barra_estado_licencia()
 
     def guardar_configuracion_actualizada(self):
@@ -107,6 +108,47 @@ class CajaGUI(QWidget):
             print("✅ Configuración actualizada guardada al iniciar")
         except Exception as e:
             print(f"❌ Error actualizando configuración: {e}")
+
+    def autenticar_usuario(self):
+        """Autenticar usuario con manejo seguro de cierre"""
+        try:
+            print("🔐 Iniciando autenticación de usuario...")
+            
+            # Crear diálogo de login
+            login_dialog = LoginDialog(self.db_manager, self)
+            login_dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowCloseButtonHint)
+            
+            # Mostrar diálogo y esperar resultado
+            result = login_dialog.exec()
+            
+            # MANEJAR CIERRE CON LA X
+            if result == QDialog.DialogCode.Rejected:
+                print("❌ Usuario canceló el login cerrando la ventana")
+                QMessageBox.information(None, "Información", "La aplicación se cerrará.")
+                QApplication.quit()
+                sys.exit(0)
+                
+            # VERIFICAR SI SE AUTENTICÓ CORRECTAMENTE
+            self.current_user = login_dialog.get_authenticated_user()
+            
+            if not self.current_user:
+                print("❌ No se pudo autenticar el usuario")
+                QMessageBox.critical(None, "Error de Autenticación", 
+                                "No se pudo autenticar el usuario. La aplicación se cerrará.")
+                QApplication.quit()
+                sys.exit(1)
+                
+            print(f"✅ Usuario autenticado: {self.current_user['nombre']}")
+            return True
+            
+        except SystemExit:
+            # Re-lanzar SystemExit para salida limpia
+            raise
+        except Exception as e:
+            print(f"❌ Error en autenticación: {e}")
+            QMessageBox.critical(None, "Error", f"Error de autenticación: {str(e)}")
+            QApplication.quit()
+            sys.exit(1)
 
     def guardar_configuracion_al_cerrar(self):
         """Guardar configuración al cerrar la aplicación"""
@@ -665,42 +707,43 @@ class CajaGUI(QWidget):
 # ==== SECCION DE LICENSIA ===
 
     def verificar_licencia(self):
-        """Verifica licencia - CON MEJORES MENSAJES"""
+        """Verificar licencia con importación corregida"""
         try:
             print("🔍 Verificando licencia...")
-        
-            if not self.license_manager.validar_licencia():
-                print("❌ Licencia no válida.")
-                return self.mostrar_opciones_licencia_expirada()
-        
-            # Mostrar información según el tipo
-            info = self.license_manager.obtener_info_licencia()
-            if self.license_manager.tipo_licencia == "demo":
-                QMessageBox.information(
-                    self,
-                    "Versión Demo Activada",
-                    f"🔬 BIENVENIDO A LA VERSIÓN DE PRUEBA\n\n"
-                    f"Ventas restantes: {info['dias_restantes']}\n"
-                    f"Límite total: {self.license_manager.limite_ventas_demo} ventas\n\n"
-                    f"💎 Para uso ilimitado, active una licencia premium."
-                )
+            
+            # Verificar licencia actual
+            if self.license_manager.verificar_licencia():
+                print("✅ Licencia verificada correctamente")
+                return True
+            
+            print("⚠️ Licencia no válida, mostrando diálogo de activación...")
+            
+            # Mostrar diálogo de activación
+            activacion_dialog = LicenciaActivationDialog(self.license_manager, self)
+            activacion_dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowCloseButtonHint)
+            
+            result = activacion_dialog.exec()
+            
+            # Manejar cierre con X
+            if result == QDialog.DialogCode.Rejected:
+                print("❌ Usuario cerró la ventana de activación")
+                QMessageBox.information(None, "Información", 
+                                    "Se requiere una licencia válida. La aplicación se cerrará.")
+                return False
+                
+            # Verificar nuevamente después del diálogo
+            if self.license_manager.verificar_licencia():
+                print("✅ Licencia activada correctamente")
+                return True
             else:
-                QMessageBox.information(
-                    self,
-                    "Licencia Premium",
-                    f"💎 LICENCIA PREMIUM ACTIVA\n\n"
-                    f"Días restantes: {info['dias_restantes']}\n"
-                    f"Expira: {info['expiracion']}\n\n"
-                    f"¡Disfrute de todas las funciones!"
-                )
-        
-            print("✅ Licencia válida.")
-            self.actualizar_barra_estado_licencia()
-            return True
-        
+                QMessageBox.critical(None, "Error de Licencia", 
+                                "No se pudo activar la licencia. La aplicación se cerrará.")
+                return False
+                
         except Exception as e:
-            print(f"❌ Error en verificar_licencia: {e}")
-            QMessageBox.critical(self, "Error", "Error al verificar licencia")
+            print(f"❌ Error verificando licencia: {e}")
+            QMessageBox.critical(None, "Error", 
+                            f"Error al verificar la licencia: {str(e)}")
             return False
 
     def mostrar_opciones_licencia_expirada(self):
