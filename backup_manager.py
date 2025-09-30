@@ -1,10 +1,11 @@
 import os
 import shutil
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QMessageBox, QListWidget, QProgressBar, QGroupBox, QCheckBox
+    QMessageBox, QListWidget, QProgressBar, QGroupBox, QCheckBox,
+    QTimeEdit, QComboBox, QSpinBox, QFormLayout, QApplication
 )
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QPalette, QColor
@@ -47,7 +48,7 @@ class BackupWorker(QThread):
             # Backup de archivos de configuración
             if self.include_config:
                 self.message.emit("Copiando configuración...")
-                config_files = ["config.json"]  # ✅ Removido productos.json ya que no se usa
+                config_files = ["config.json", "licencia.json"]
                 app_dir = get_app_directory()
                 for config_file in config_files:
                     config_path = os.path.join(app_dir, config_file)
@@ -74,7 +75,7 @@ class BackupWorker(QThread):
             self.progress.emit(90)
             
             # Crear registro del backup
-            self.crear_registro_backup(backup_path + ".zip")
+            self.crear_registro_backup(zip_path)
             self.progress.emit(100)
             
             self.message.emit("Backup completado exitosamente")
@@ -161,6 +162,213 @@ class BackupWorker(QThread):
         except Exception as e:
             print(f"❌ Error registrando backup: {e}")
 
+class RestoreWorker(QThread):
+    progress = pyqtSignal(int)
+    message = pyqtSignal(str)
+    finished = pyqtSignal(bool, str)
+
+    def __init__(self, backup_path, db_path, app_dir):
+        super().__init__()
+        self.backup_path = backup_path
+        self.db_path = db_path
+        self.app_dir = app_dir
+
+    def run(self):
+        try:
+            self.message.emit("Iniciando restauración...")
+            self.progress.emit(10)
+
+            # Crear directorio temporal para extracción
+            temp_dir = os.path.join(self.app_dir, "temp_restore")
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+            
+            self.message.emit("Extrayendo archivos de backup...")
+            shutil.unpack_archive(self.backup_path, temp_dir)
+            self.progress.emit(30)
+
+            # Cerrar todas las conexiones a la base de datos existente
+            self.message.emit("Preparando base de datos...")
+            self.progress.emit(50)
+
+            # Copiar base de datos del backup
+            db_backup_path = os.path.join(temp_dir, "caja_registradora.db")
+            if os.path.exists(db_backup_path):
+                # Hacer backup de la base de datos actual antes de reemplazar
+                backup_actual = f"{self.db_path}.backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                if os.path.exists(self.db_path):
+                    shutil.copy2(self.db_path, backup_actual)
+                
+                # Reemplazar base de datos
+                shutil.copy2(db_backup_path, self.db_path)
+                self.progress.emit(70)
+
+            # Restaurar archivos de configuración
+            self.message.emit("Restaurando configuración...")
+            for config_file in ["config.json", "licencia.json"]:
+                config_backup_path = os.path.join(temp_dir, config_file)
+                if os.path.exists(config_backup_path):
+                    shutil.copy2(config_backup_path, os.path.join(self.app_dir, config_file))
+            self.progress.emit(85)
+
+            # Restaurar tickets
+            self.message.emit("Restaurando tickets...")
+            tickets_backup_path = os.path.join(temp_dir, "tickets")
+            tickets_dir = os.path.join(self.app_dir, "tickets")
+            if os.path.exists(tickets_backup_path):
+                if os.path.exists(tickets_dir):
+                    shutil.rmtree(tickets_dir)
+                shutil.copytree(tickets_backup_path, tickets_dir)
+            self.progress.emit(95)
+
+            # Limpiar directorio temporal
+            shutil.rmtree(temp_dir)
+            self.progress.emit(100)
+
+            self.message.emit("Restauración completada exitosamente")
+            self.finished.emit(True, "Backup restaurado correctamente. Reinicie la aplicación.")
+
+        except Exception as e:
+            self.message.emit(f"Error en restauración: {str(e)}")
+            self.finished.emit(False, f"Error durante la restauración: {str(e)}")
+
+class AutoBackupConfigDialog(QDialog):
+    def __init__(self, db_manager, parent=None):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.setWindowTitle("Configurar Auto-Backup")
+        self.setGeometry(300, 200, 400, 350)
+        
+        # Estilo de la ventana
+        palette = self.palette()
+        palette.setColor(QPalette.ColorRole.Window, QColor("#ecf0f1"))
+        self.setPalette(palette)
+        
+        layout = QVBoxLayout()
+        
+        # Formulario de configuración
+        form_group = QGroupBox("Configuración de Auto-Backup")
+        form_layout = QFormLayout()
+        
+        # Habilitar auto-backup
+        self.cb_habilitado = QCheckBox("Habilitar backup automático")
+        form_layout.addRow(self.cb_habilitado)
+        
+        # Hora del backup
+        self.time_edit = QTimeEdit()
+        self.time_edit.setDisplayFormat("HH:mm")
+        form_layout.addRow("Hora del backup:", self.time_edit)
+        
+        # Frecuencia
+        self.combo_frecuencia = QComboBox()
+        self.combo_frecuencia.addItems(["Diario", "Semanal"])
+        form_layout.addRow("Frecuencia:", self.combo_frecuencia)
+        
+        # Días a mantener backups
+        self.spin_dias = QSpinBox()
+        self.spin_dias.setRange(1, 365)
+        self.spin_dias.setValue(7)
+        form_layout.addRow("Días a mantener backups:", self.spin_dias)
+        
+        form_group.setLayout(form_layout)
+        layout.addWidget(form_group)
+        
+        # Botones
+        buttons_layout = QHBoxLayout()
+        
+        btn_guardar = QPushButton("Guardar Configuración")
+        btn_guardar.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold;")
+        btn_guardar.clicked.connect(self.guardar_configuracion)
+        buttons_layout.addWidget(btn_guardar)
+        
+        btn_cancelar = QPushButton("Cancelar")
+        btn_cancelar.setStyleSheet("background-color: #7f8c8d; color: white; font-weight: bold;")
+        btn_cancelar.clicked.connect(self.reject)
+        buttons_layout.addWidget(btn_cancelar)
+        
+        layout.addLayout(buttons_layout)
+        
+        self.setLayout(layout)
+        
+        # Cargar configuración actual
+        self.cargar_configuracion_actual()
+
+    def cargar_configuracion_actual(self):
+        """Carga la configuración actual desde la base de datos"""
+        try:
+            config = self.cargar_configuracion_auto_backup()
+            
+            self.cb_habilitado.setChecked(config["habilitado"])
+            
+            # Configurar hora
+            hora_str = config["hora"]
+            hora_obj = datetime.strptime(hora_str, "%H:%M").time()
+            self.time_edit.setTime(hora_obj)
+            
+            # Configurar frecuencia
+            index = self.combo_frecuencia.findText(config["frecuencia"].capitalize())
+            if index >= 0:
+                self.combo_frecuencia.setCurrentIndex(index)
+            
+            # Configurar días
+            self.spin_dias.setValue(config["mantener_dias"])
+            
+        except Exception as e:
+            print(f"❌ Error cargando configuración: {e}")
+
+    def cargar_configuracion_auto_backup(self):
+        """Carga la configuración de auto-backup desde la base de datos"""
+        try:
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT clave, valor FROM configuracion 
+                    WHERE clave LIKE 'auto_backup_%'
+                """)
+                config_data = {row[0]: row[1] for row in cursor.fetchall()}
+                
+                return {
+                    "habilitado": config_data.get("auto_backup_habilitado", "0") == "1",
+                    "hora": config_data.get("auto_backup_hora", "02:00"),
+                    "frecuencia": config_data.get("auto_backup_frecuencia", "diario"),
+                    "mantener_dias": int(config_data.get("auto_backup_mantener_dias", "7"))
+                }
+        except Exception as e:
+            print(f"❌ Error cargando configuración auto-backup: {e}")
+            return {
+                "habilitado": False,
+                "hora": "02:00",
+                "frecuencia": "diario", 
+                "mantener_dias": 7
+            }
+
+    def guardar_configuracion(self):
+        """Guarda la configuración de auto-backup en la BD"""
+        try:
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                configuraciones = [
+                    ("auto_backup_habilitado", "1" if self.cb_habilitado.isChecked() else "0", "Auto-backup habilitado"),
+                    ("auto_backup_hora", self.time_edit.time().toString("HH:mm"), "Hora del backup automático"),
+                    ("auto_backup_frecuencia", self.combo_frecuencia.currentText().lower(), "Frecuencia del backup"),
+                    ("auto_backup_mantener_dias", str(self.spin_dias.value()), "Días a mantener backups")
+                ]
+                
+                for clave, valor, descripcion in configuraciones:
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO configuracion (clave, valor, descripcion)
+                        VALUES (?, ?, ?)
+                    """, (clave, valor, descripcion))
+                
+                conn.commit()
+                
+            QMessageBox.information(self, "Éxito", "Configuración de auto-backup guardada correctamente")
+            self.accept()
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo guardar la configuración: {str(e)}")
+
 class BackupManagerDialog(QDialog):
     def __init__(self, db_manager, parent=None):
         super().__init__(parent)
@@ -185,7 +393,7 @@ class BackupManagerDialog(QDialog):
         config_group = QGroupBox("Configuración de Backup")
         config_layout = QVBoxLayout()
         
-        self.cb_config = QCheckBox("Incluir archivos de configuración (config.json)")
+        self.cb_config = QCheckBox("Incluir archivos de configuración (config.json, licencia.json)")
         self.cb_config.setChecked(True)
         config_layout.addWidget(self.cb_config)
         
@@ -206,10 +414,10 @@ class BackupManagerDialog(QDialog):
         self.lbl_backup_dir.setWordWrap(True)
         dir_layout.addWidget(self.lbl_backup_dir)
         
-        btn_change_dir = QPushButton("Cambiar Directorio")
-        btn_change_dir.setStyleSheet("background-color: #3498db; color: white; font-weight: bold;")
-        btn_change_dir.clicked.connect(self.cambiar_directorio)
-        dir_layout.addWidget(btn_change_dir)
+        btn_abrir_dir = QPushButton("Abrir Directorio de Backups")
+        btn_abrir_dir.setStyleSheet("background-color: #3498db; color: white; font-weight: bold;")
+        btn_abrir_dir.clicked.connect(self.abrir_directorio_backups)
+        dir_layout.addWidget(btn_abrir_dir)
         
         dir_group.setLayout(dir_layout)
         layout.addWidget(dir_group)
@@ -255,6 +463,20 @@ class BackupManagerDialog(QDialog):
         self.list_backups = QListWidget()
         backups_layout.addWidget(self.list_backups)
         
+        # Botones para gestión de backups
+        backup_buttons_layout = QHBoxLayout()
+        
+        btn_eliminar_backup = QPushButton("Eliminar Backup Seleccionado")
+        btn_eliminar_backup.setStyleSheet("background-color: #e74c3c; color: white; font-weight: bold;")
+        btn_eliminar_backup.clicked.connect(self.eliminar_backup)
+        backup_buttons_layout.addWidget(btn_eliminar_backup)
+        
+        btn_limpiar_antiguos = QPushButton("Limpiar Backups Antiguos")
+        btn_limpiar_antiguos.setStyleSheet("background-color: #e67e22; color: white; font-weight: bold;")
+        btn_limpiar_antiguos.clicked.connect(self.limpiar_backups_antiguos)
+        backup_buttons_layout.addWidget(btn_limpiar_antiguos)
+        
+        backups_layout.addLayout(backup_buttons_layout)
         backups_group.setLayout(backups_layout)
         layout.addWidget(backups_group)
         
@@ -268,14 +490,14 @@ class BackupManagerDialog(QDialog):
         
         self.cargar_backups()
         
-        # Timer para backup automático
+        # Timer para backup automático (verificar cada minuto)
         self.auto_backup_timer = QTimer()
         self.auto_backup_timer.timeout.connect(self.verificar_auto_backup)
-        self.auto_backup_timer.start(60000)  # Verificar cada minuto
+        self.auto_backup_timer.start(60000)
         
         # ✅ VERIFICAR ESTRUCTURA AL INICIAR
         self.verificar_estructura_backups()
-    
+
     def verificar_estructura_backups(self):
         """Verificación adicional en el diálogo principal"""
         try:
@@ -287,12 +509,19 @@ class BackupManagerDialog(QDialog):
             conn.close()
         except Exception as e:
             print(f"ℹ️ Info de estructura: {e}")
-    
-    def cambiar_directorio(self):
-        # En una implementación real, aquí iría un QFileDialog
-        QMessageBox.information(self, "Info", "En una versión completa, esto abriría un diálogo para seleccionar directorio")
-    
+
+    def abrir_directorio_backups(self):
+        """Abre el directorio de backups en el explorador de archivos"""
+        try:
+            if os.name == 'nt':  # Windows
+                os.startfile(self.backup_dir)
+            elif os.name == 'posix':  # Linux, macOS
+                os.system(f'xdg-open "{self.backup_dir}"')
+        except Exception as e:
+            QMessageBox.warning(self, "Info", f"No se pudo abrir el directorio: {str(e)}")
+
     def cargar_backups(self):
+        """Carga la lista de backups disponibles"""
         self.list_backups.clear()
         if os.path.exists(self.backup_dir):
             backups = sorted([f for f in os.listdir(self.backup_dir) if f.endswith('.zip')], reverse=True)
@@ -301,7 +530,7 @@ class BackupManagerDialog(QDialog):
                 size = os.path.getsize(backup_path) / (1024 * 1024)
                 date = datetime.fromtimestamp(os.path.getctime(backup_path))
                 self.list_backups.addItem(f"{backup} ({size:.2f} MB) - {date.strftime('%Y-%m-%d %H:%M')}")
-    
+
     def ejecutar_backup(self):
         # ✅ VERIFICACIÓN ADICIONAL ANTES DE BACKUP
         self.verificar_estructura_backups()
@@ -320,15 +549,20 @@ class BackupManagerDialog(QDialog):
         self.worker.message.connect(self.lbl_status.setText)
         self.worker.finished.connect(self.backup_finalizado)
         self.worker.start()
-    
+
     def backup_finalizado(self, success, message):
         self.btn_backup.setEnabled(True)
         if success:
             QMessageBox.information(self, "Éxito", message)
             self.cargar_backups()
+            # Limpiar backups antiguos después de crear uno nuevo
+            self.limpiar_backups_antiguos()
         else:
             QMessageBox.critical(self, "Error", message)
-    
+        
+        self.progress_bar.setValue(0)
+        self.lbl_status.setText("Listo para realizar backup")
+
     def restaurar_backup(self):
         selected = self.list_backups.currentItem()
         if not selected:
@@ -340,36 +574,192 @@ class BackupManagerDialog(QDialog):
         
         respuesta = QMessageBox.question(
             self, "Confirmar", 
-            "¿Está seguro de restaurar este backup? Se sobreescribirán los datos actuales."
+            "¿Está seguro de restaurar este backup?\n\n"
+            "⚠️  Se sobreescribirán los datos actuales y la aplicación se cerrará."
         )
         
         if respuesta == QMessageBox.StandardButton.Yes:
-            QMessageBox.information(self, "Info", f"Backup {backup_name} seleccionado para restaurar")
-            # Aquí iría la lógica completa de restauración
-    
-    def configurar_auto_backup(self):
-        QMessageBox.information(self, "Auto-Backup", 
-            "Configuración de backup automático:\n"
-            "• Diario a las 23:00\n"
-            "• Mantener últimos 7 backups\n"
-            "• Notificar por email (si está configurado)")
-    
-    def verificar_auto_backup(self):
-        # Verificar si es hora de hacer backup automático (ej: cada día a las 23:00)
-        ahora = datetime.now()
-        if ahora.hour == 23 and ahora.minute == 0:
-            self.ejecutar_backup()
+            try:
+                self.lbl_status.setText("Preparando restauración...")
+                self.btn_restore.setEnabled(False)
+                
+                self.restore_worker = RestoreWorker(
+                    backup_path, 
+                    self.db_path, 
+                    get_app_directory()
+                )
+                
+                self.restore_worker.progress.connect(self.progress_bar.setValue)
+                self.restore_worker.message.connect(self.lbl_status.setText)
+                self.restore_worker.finished.connect(self.restore_finalizado)
+                self.restore_worker.start()
+                
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"No se pudo iniciar la restauración: {str(e)}")
 
-class AutoBackupConfigDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Configurar Auto-Backup")
-        self.setGeometry(300, 200, 400, 300)
+    def restore_finalizado(self, success, message):
+        self.btn_restore.setEnabled(True)
+        self.progress_bar.setValue(0)
         
-        layout = QVBoxLayout()
+        if success:
+            QMessageBox.information(self, "Éxito", 
+                f"{message}\n\nLa aplicación se cerrará ahora para completar la restauración.")
+            # Cerrar la aplicación
+            QApplication.quit()
+        else:
+            QMessageBox.critical(self, "Error", message)
+            self.lbl_status.setText("Error en restauración")
+
+    def configurar_auto_backup(self):
+        """Abre el diálogo de configuración de auto-backup"""
+        dialog = AutoBackupConfigDialog(self.db_manager, self)
+        dialog.exec()
+
+    def verificar_auto_backup(self):
+        """Verifica si es hora de hacer backup automático"""
+        ahora = datetime.now()
         
-        # TODO: Implementar interfaz para configurar auto-backup
-        label = QLabel("Configuración de Backup Automático")
-        layout.addWidget(label)
+        # Cargar configuración de auto-backup
+        config = self.cargar_configuracion_auto_backup()
         
-        self.setLayout(layout)
+        if not config.get("habilitado", False):
+            return
+        
+        hora_programada = config.get("hora", "02:00")
+        frecuencia = config.get("frecuencia", "diario")
+        
+        try:
+            hora_obj = datetime.strptime(hora_programada, "%H:%M").time()
+            ahora_time = ahora.time()
+            
+            # Verificar si es la hora programada (con margen de 1 minuto)
+            if (abs(ahora_time.hour - hora_obj.hour) == 0 and 
+                abs(ahora_time.minute - hora_obj.minute) <= 1):
+                
+                # Verificar que no hayamos hecho backup en la última hora
+                ultimo_backup = self.obtener_ultimo_backup_tiempo()
+                if ultimo_backup and (ahora - ultimo_backup).total_seconds() < 3600:
+                    return
+                
+                # Verificar frecuencia
+                if frecuencia == "diario":
+                    self.ejecutar_backup_automatico()
+                elif frecuencia == "semanal" and ahora.weekday() == 0:  # Lunes
+                    self.ejecutar_backup_automatico()
+                    
+        except Exception as e:
+            print(f"❌ Error verificando auto-backup: {e}")
+
+    def ejecutar_backup_automatico(self):
+        """Ejecuta backup automático sin interacción del usuario"""
+        try:
+            print("🔄 Iniciando backup automático...")
+            self.worker = BackupWorker(
+                self.db_path, 
+                self.backup_dir,
+                include_config=True,
+                include_tickets=True
+            )
+            self.worker.finished.connect(self.auto_backup_finalizado)
+            self.worker.start()
+        except Exception as e:
+            print(f"❌ Error iniciando backup automático: {e}")
+
+    def auto_backup_finalizado(self, success, message):
+        """Maneja la finalización del backup automático"""
+        if success:
+            print(f"✅ Backup automático completado: {message}")
+            self.cargar_backups()
+            self.limpiar_backups_antiguos()
+        else:
+            print(f"❌ Backup automático falló: {message}")
+
+    def cargar_configuracion_auto_backup(self):
+        """Carga la configuración de auto-backup desde la base de datos"""
+        try:
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT clave, valor FROM configuracion 
+                    WHERE clave LIKE 'auto_backup_%'
+                """)
+                config_data = {row[0]: row[1] for row in cursor.fetchall()}
+                
+                return {
+                    "habilitado": config_data.get("auto_backup_habilitado", "0") == "1",
+                    "hora": config_data.get("auto_backup_hora", "02:00"),
+                    "frecuencia": config_data.get("auto_backup_frecuencia", "diario"),
+                    "mantener_dias": int(config_data.get("auto_backup_mantener_dias", "7"))
+                }
+        except Exception as e:
+            print(f"❌ Error cargando configuración auto-backup: {e}")
+            return {
+                "habilitado": False,
+                "hora": "02:00",
+                "frecuencia": "diario", 
+                "mantener_dias": 7
+            }
+
+    def obtener_ultimo_backup_tiempo(self):
+        """Obtiene el tiempo del último backup realizado"""
+        try:
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT fecha FROM backups 
+                    ORDER BY fecha DESC LIMIT 1
+                """)
+                result = cursor.fetchone()
+                if result:
+                    return datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S")
+        except Exception as e:
+            print(f"❌ Error obteniendo último backup: {e}")
+        return None
+
+    def limpiar_backups_antiguos(self):
+        """Elimina backups más antiguos que los días configurados"""
+        try:
+            config = self.cargar_configuracion_auto_backup()
+            mantener_dias = config.get("mantener_dias", 7)
+            fecha_limite = datetime.now() - timedelta(days=mantener_dias)
+            
+            if os.path.exists(self.backup_dir):
+                eliminados = 0
+                for archivo in os.listdir(self.backup_dir):
+                    if archivo.endswith('.zip'):
+                        archivo_path = os.path.join(self.backup_dir, archivo)
+                        fecha_creacion = datetime.fromtimestamp(os.path.getctime(archivo_path))
+                        if fecha_creacion < fecha_limite:
+                            os.remove(archivo_path)
+                            eliminados += 1
+                            print(f"🗑️ Eliminado backup antiguo: {archivo}")
+                
+                if eliminados > 0:
+                    self.cargar_backups()
+                    print(f"✅ Eliminados {eliminados} backups antiguos")
+                    
+        except Exception as e:
+            print(f"❌ Error limpiando backups antiguos: {e}")
+
+    def eliminar_backup(self):
+        """Elimina el backup seleccionado"""
+        selected = self.list_backups.currentItem()
+        if not selected:
+            QMessageBox.warning(self, "Error", "Seleccione un backup para eliminar")
+            return
+        
+        backup_name = selected.text().split(' ')[0]
+        backup_path = os.path.join(self.backup_dir, backup_name)
+        
+        respuesta = QMessageBox.question(
+            self, "Confirmar", 
+            f"¿Está seguro de que quiere eliminar el backup '{backup_name}'?"
+        )
+        
+        if respuesta == QMessageBox.StandardButton.Yes:
+            try:
+                os.remove(backup_path)
+                QMessageBox.information(self, "Éxito", "Backup eliminado correctamente")
+                self.cargar_backups()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"No se pudo eliminar el backup: {str(e)}")

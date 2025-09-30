@@ -6,10 +6,10 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
     QListWidget, QHBoxLayout, QMessageBox, QInputDialog,
     QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget,
-    QComboBox, QLineEdit, QGroupBox, QDialog
+    QComboBox, QLineEdit, QGroupBox, QDialog, QSizePolicy
 )
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from database import DatabaseManager
 from auth_manager import LoginDialog
@@ -97,7 +97,6 @@ class CajaGUI(QWidget):
         # Inicializar interfaz
         self.init_ui()
         self.aplicar_tema()
-        self.actualizar_barra_estado_licencia()
 
     def guardar_configuracion_actualizada(self):
         """Asegurar que la configuración tenga todas las claves necesarias"""
@@ -229,18 +228,9 @@ class CajaGUI(QWidget):
             self.current_user = {"id": 1, "username": "admin", "nombre": "Administrador", "rol": "administrador"}
 
     def aplicar_tema(self):
-        """Aplicar tema desde archivo themes.py"""
-        tema = self.config.get('tema', 'claro')
-        print(f"🎨 Aplicando tema: {tema}")
-    
-        try:
-            estilo = obtener_tema(tema)
-            self.setStyleSheet(estilo)
-            self.update()
-            self.repaint()
-            print(f"✅ Tema {tema} aplicado correctamente")
-        except Exception as e:
-            print(f"❌ Error aplicando tema: {e}")
+        """Aplicar tema desde archivo themes.py - VERSIÓN MEJORADA"""
+        # Ahora usa el método mejorado para consistencia
+        self.aplicar_tema_mejorado()
 
     def cargar_configuracion(self):
         """Cargar configuración desde archivo"""
@@ -256,17 +246,114 @@ class CajaGUI(QWidget):
             self.config = {"tema": "claro"}
 
     def abrir_panel_configuracion(self):
-        """Abrir panel de configuración"""
+        """Abrir panel de configuración con manejo de cambios en tiempo real"""
         try:
             dialog = ConfigPanelDialog(self.db_manager, self.config, self)
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                nuevo_config = dialog.get_updated_config()
-                if nuevo_config:
-                    self.config = nuevo_config
-                    self.aplicar_tema()
-                    QMessageBox.information(self, "Listo", "Cambios aplicados localmente")
+            
+            # CONECTAR SEÑAL DE CAMBIOS (verificar que no dé error)
+            dialog.config_changed.connect(self.aplicar_cambios_configuracion)
+            
+            dialog.exec()  
+            
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo abrir configuración: {str(e)}")
+
+     # === MÉTODOS NUEVOS PARA CAMBIOS EN TIEMPO REAL ===
+
+    def aplicar_cambios_configuracion(self, nuevo_config):
+        """Aplica los cambios de configuración en tiempo real - VERSIÓN OPTIMIZADA"""
+        try:
+            print("🔄 Aplicando cambios de configuración (optimizado)...")
+            
+            # ACTUALIZAR CONFIGURACIÓN
+            self.config.update(nuevo_config)
+            
+            # APLICAR NUEVO TEMA INMEDIATAMENTE (optimizado)
+            self.aplicar_tema_mejorado()
+            
+            # ACTUALIZAR NOMBRE DEL NEGOCIO EN LA VENTANA
+            if 'nombre_negocio' in nuevo_config:
+                nuevo_nombre = nuevo_config['nombre_negocio']
+                self.setWindowTitle(f"{nuevo_nombre} - Usuario: {self.current_user['nombre']}")
+                print(f"✅ Nombre actualizado: {nuevo_nombre}")
+            
+            # ACTUALIZAR LOGO SI CAMBIÓ (optimizado)
+            if 'logo_path' in nuevo_config:
+                QTimer.singleShot(100, self.actualizar_logo_en_tiempo_real)
+            
+            # GUARDAR CONFIGURACIÓN PERSISTENTE (en segundo plano)
+            QTimer.singleShot(200, self.guardar_configuracion_fondo)
+            
+            print("✅ Cambios de configuración aplicados (sin bloqueo)")
+            
+        except Exception as e:
+            print(f"❌ Error aplicando cambios: {e}")
+
+    def guardar_configuracion_fondo(self):
+        """Guardar configuración en segundo plano para no bloquear la UI"""
+        try:
+            config_manager.update_config(self.config)
+            print("💾 Configuración guardada en segundo plano")
+        except Exception as e:
+            print(f"❌ Error guardando configuración: {e}")
+            
+    def aplicar_tema_mejorado(self):
+        """Aplicar tema mejorado - VERSIÓN OPTIMIZADA"""
+        tema = self.config.get('tema', 'claro')
+        print(f"🎨 Aplicando tema optimizado: {tema}")
+        
+        try:
+            estilo = obtener_tema(tema)
+            
+            # ✅ OPTIMIZACIÓN: Aplicar solo a los contenedores principales
+            self.setStyleSheet(estilo)
+            
+            # ✅ OPTIMIZACIÓN: Aplicar solo a widgets específicos en lugar de todos recursivamente
+            widgets_principales = [
+                self.tabs,  # El QTabWidget principal
+                self.findChild(QGroupBox),  # Primer QGroupBox que encuentre
+            ]
+            
+            for widget in widgets_principales:
+                if widget:
+                    widget.setStyleSheet(estilo)
+            
+            # ✅ OPTIMIZACIÓN: Actualización diferida
+            QTimer.singleShot(50, self.forzar_actualizacion_ui)
+            
+            print(f"✅ Tema {tema} aplicado correctamente (optimizado)")
+            
+        except Exception as e:
+            print(f"❌ Error aplicando tema optimizado: {e}")
+
+    def forzar_actualizacion_ui(self):
+        """Forzar actualización de la UI después de un breve delay"""
+        self.update()
+        self.repaint()
+        QApplication.processEvents()
+        
+    def actualizar_logo_en_tiempo_real(self):
+        """Actualiza el logo en tiempo real - VERSIÓN OPTIMIZADA"""
+        try:
+            # Buscar específicamente el logo label
+            logo_label = None
+            header_layout = self.findChild(QHBoxLayout)
+            
+            if header_layout:
+                for i in range(header_layout.count()):
+                    widget = header_layout.itemAt(i).widget()
+                    if isinstance(widget, QLabel) and widget.pixmap():
+                        logo_label = widget
+                        break
+            
+            if logo_label:
+                self.cargar_logo(logo_label)
+                print("✅ Logo actualizado (optimizado)")
+            else:
+                print("⚠️ Logo label no encontrado")
+                    
+        except Exception as e:
+            print(f"❌ Error actualizando logo: {e}")
 
     # ===== MÉTODOS DE GESTIÓN =====
     def gestionar_inventario(self):
@@ -501,11 +588,16 @@ class CajaGUI(QWidget):
         top_buttons.addWidget(QPushButton("💾 Sistema de Backup", clicked=self.gestionar_backups))
         top_buttons.addWidget(QPushButton("📈 Historial de Ventas", clicked=self.ver_historial_ventas))
         layout.addLayout(top_buttons)
-    
+
         sales_group = QGroupBox("Resumen de Ventas Hoy")
         sales_layout = QVBoxLayout()
         self.sales_today_summary = QLabel("Cargando información...")
         sales_layout.addWidget(self.sales_today_summary)
+        
+        sales_group.setLayout(sales_layout)
+        layout.addWidget(sales_group)
+        self.actualizar_resumen_ventas_hoy()
+
         sales_group.setLayout(sales_layout)
         layout.addWidget(sales_group)
         self.actualizar_resumen_ventas_hoy()
@@ -661,6 +753,9 @@ class CajaGUI(QWidget):
     
         # ACTUALIZAR BARRA DE ESTADO
         self.actualizar_barra_estado_licencia()
+
+        # Actualizar resumen de ventas de hoy en tiempo real
+        self.actualizar_resumen_ventas_hoy()
     
         # VERIFICAR SI SE ALCANZÓ EL LÍMITE DESPUÉS DE ESTA VENTA
         if not self.license_manager.validar_licencia():
@@ -692,17 +787,39 @@ class CajaGUI(QWidget):
 ⚠️ Atención: {stock_bajo} productos necesitan reposición""")
 
     def actualizar_resumen_ventas_hoy(self):
-        hoy = datetime.now().strftime("%Y-%m-%d")
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*), SUM(total) FROM ventas WHERE DATE(fecha) = ?", (hoy,))
-            count, total = cursor.fetchone()
-            count = count or 0
-            total = total or 0
-        
-        self.sales_today_summary.setText(f"""📊 VENTAS HOY ({hoy})
-• Total ventas: {formato_moneda_mx(total)}
-• N° de ventas: {count}""")
+        """Actualiza el resumen de ventas del día actual - VERSIÓN CORREGIDA"""
+        try:
+            hoy = datetime.now().strftime("%Y-%m-%d")
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # ✅ CONSULTA MEJORADA - Manejar NULL values correctamente
+                cursor.execute("""
+                    SELECT 
+                        COUNT(*) as total_ventas,
+                        COALESCE(SUM(total), 0) as total_importe
+                    FROM ventas 
+                    WHERE DATE(fecha) = ? AND estado = 'completada'
+                """, (hoy,))
+                
+                resultado = cursor.fetchone()
+                count = resultado[0] or 0
+                total = resultado[1] or 0
+            
+            # ✅ ACTUALIZAR SIEMPRE - incluso si no hay ventas
+            if hasattr(self, 'sales_today_summary') and self.sales_today_summary:
+                texto = f"""📊 VENTAS HOY ({hoy})
+    • Total ventas: {formato_moneda_mx(total)}
+    • N° de ventas: {count}"""
+                
+                self.sales_today_summary.setText(texto)
+                print(f"✅ Resumen ventas actualizado: {count} ventas, {formato_moneda_mx(total)}")
+                
+        except Exception as e:
+            print(f"❌ Error actualizando resumen de ventas: {e}")
+            # ✅ MOSTRAR MENSAJE DE ERROR EN LA INTERFAZ
+            if hasattr(self, 'sales_today_summary') and self.sales_today_summary:
+                self.sales_today_summary.setText(f"❌ Error cargando ventas de hoy")
 
 # ==== SECCION DE LICENSIA ===
 
@@ -826,35 +943,10 @@ class CajaGUI(QWidget):
             return False
         
     def actualizar_barra_estado_licencia(self):
-        """Actualiza la barra de estado con información de la licencia"""
-        try:
-            info = self.license_manager.obtener_info_licencia()
-        
-            if self.license_manager.tipo_licencia == "premium":
-                texto = "💎 LICENCIA PREMIUM"
-                estilo = "background-color: #d4edda; color: #155724; font-weight: bold; padding: 5px; border-radius: 3px;"
-                tooltip = "Licencia premium activa - Ventas ilimitadas"
-            else:
-                ventas_restantes = self.license_manager.limite_ventas_demo - self.license_manager.config_demo["ventas_realizadas"]
-                texto = f"🔬 DEMO - {ventas_restantes} ventas restantes"
-                estilo = "background-color: #fff3cd; color: #856404; font-weight: bold; padding: 5px; border-radius: 3px;"
-                tooltip = f"Versión demo - Límite: {self.license_manager.limite_ventas_demo} ventas"
-        
-            # Crear o actualizar barra de estado
-            if not hasattr(self, 'licencia_status_label'):
-                self.licencia_status_label = QLabel()
-                self.licencia_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                # Agregar al header layout
-                header_layout = self.findChild(QHBoxLayout)  # Ajusta según tu estructura
-                if header_layout:
-                    header_layout.addWidget(self.licencia_status_label)
-        
-            self.licencia_status_label.setText(texto)
-            self.licencia_status_label.setStyleSheet(estilo)
-            self.licencia_status_label.setToolTip(tooltip)
-        
-        except Exception as e:
-            print(f"❌ Error actualizando barra de estado: {e}")
+        """Método simplificado - Ya no muestra el cuadro de estado"""
+        # ✅ Este método ahora no hace nada visible, pero se mantiene
+        # para no romper otras partes del código que lo llaman
+        pass
 
     def mostrar_estado_licencia(self):
         """Muestra estado de licencia - VERSIÓN MEJORADA CON DEMO"""

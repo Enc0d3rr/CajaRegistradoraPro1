@@ -33,6 +33,27 @@ class InventoryManagerDialog(QDialog):
         search_layout.addWidget(QLabel("Categoría:"))
         self.categoria_combo = QComboBox()
         search_layout.addWidget(self.categoria_combo)
+
+        # Boton Ver códigos disponibles
+        btn_ver_codigos = QPushButton("📋 Códigos")
+        btn_ver_codigos.setToolTip("Ver todos los códigos disponibles (activos e inactivos)")
+        btn_ver_codigos.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db; 
+                color: white; 
+                font-size: 10px;
+                padding: 6px 10px;
+                border: none;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
+        btn_ver_codigos.clicked.connect(self.mostrar_codigos_disponibles)
+        search_layout.addWidget(btn_ver_codigos)
+        
+        layout.addLayout(search_layout)
         
         layout.addLayout(search_layout)
         
@@ -174,8 +195,10 @@ class InventoryManagerDialog(QDialog):
                 self.table.setItem(row, 0, QTableWidgetItem(str(id_)))
                 self.table.setItem(row, 1, QTableWidgetItem(codigo))
                 self.table.setItem(row, 2, QTableWidgetItem(nombre))
+
                 precio_formateado = formato_moneda_mx(precio)
                 self.table.setItem(row, 3, QTableWidgetItem(precio_formateado))
+
                 self.table.setItem(row, 4, QTableWidgetItem(str(stock)))
                 self.table.setItem(row, 5, QTableWidgetItem(str(stock_min)))
                 self.table.setItem(row, 6, QTableWidgetItem(categoria_nombre or "Sin categoría"))
@@ -341,22 +364,60 @@ class InventoryManagerDialog(QDialog):
         
         respuesta = QMessageBox.question(
             self, "Confirmar", 
-            f"¿Está seguro de que quiere eliminar el producto '{nombre}'?"
+            f"¿Está seguro de que quiere eliminar el producto '{nombre}'?\n\n"
+            f"El código '{codigo}' quedará disponible para nuevos productos."
         )
         
         if respuesta == QMessageBox.StandardButton.Yes:
             try:
                 with self.db_manager.get_connection() as conn:
                     cursor = conn.cursor()
-                    # CAMBIO IMPORTANTE: DELETE en lugar de UPDATE
-                    cursor.execute("DELETE FROM productos WHERE id = ?", (product_id,))
+                    # ✅ SOLO marcar como inactivo - el código se mantiene igual
+                    cursor.execute(
+                        "UPDATE productos SET activo = 0 WHERE id = ?", 
+                        (product_id,)
+                    )
                     conn.commit()
 
-                QMessageBox.information(self, "Éxito", "Producto eliminado correctamente")
+                QMessageBox.information(
+                    self, "Éxito", 
+                    f"Producto '{nombre}' eliminado correctamente.\n"
+                    f"✅ El código '{codigo}' está ahora disponible para nuevos productos."
+                )
                 self.cargar_productos()
             
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar el producto: {str(e)}")
+
+    def mostrar_codigos_disponibles(self):
+        """Muestra todos los códigos (activos e inactivos) para ayudar al usuario"""
+        try:
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT codigo, nombre, 
+                        CASE WHEN activo = 1 THEN '🟢 ACTIVO' ELSE '🔴 INACTIVO (Código libre)' END as estado
+                    FROM productos 
+                    ORDER BY activo DESC, codigo
+                """)
+                productos = cursor.fetchall()
+                
+                if productos:
+                    mensaje = "📋 TODOS LOS CÓDIGOS:\n\n"
+                    mensaje += "🟢 ACTIVOS - En uso actualmente\n" 
+                    mensaje += "🔴 INACTIVOS - Códigos LIBRES para reusar\n\n"
+                    
+                    for codigo, nombre, estado in productos:
+                        # Mostrar nombres truncados para mejor visualización
+                        nombre_truncado = nombre[:25] + "..." if len(nombre) > 25 else nombre
+                        mensaje += f"{estado}\n{codigo} - {nombre_truncado}\n\n"
+                    
+                    QMessageBox.information(self, "Códigos disponibles", mensaje)
+                else:
+                    QMessageBox.information(self, "Info", "No hay productos registrados")
+                    
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"No se pudieron cargar los códigos: {e}")
     
     def ajustar_stock(self):
         selected = self.get_selected_product()

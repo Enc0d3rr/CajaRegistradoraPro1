@@ -2,18 +2,18 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView,
     QDateEdit, QComboBox, QGroupBox, QTextEdit, QTabWidget,
-    QApplication, QLineEdit, QCheckBox, QWidget
+    QApplication, QLineEdit, QCheckBox, QWidget, QSizePolicy
 )
 from PyQt6.QtGui import QPalette, QColor, QFont
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, QTimer
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import numpy as np
 
-# ✅ Importar el diálogo de exportación
 from export_dialog import ExportDialog
+from utils.helpers import formato_moneda_mx
 
 class SalesHistoryDialog(QDialog):
     def __init__(self, db_manager, parent=None):
@@ -156,26 +156,51 @@ class SalesHistoryDialog(QDialog):
         layout.addWidget(self.sales_table)
     
     def setup_analysis_tab(self, layout):
-        # Gráficos
+        """Configurar pestaña de análisis con layout mejorado"""
+        # Gráficos - Usar un layout más flexible
         charts_layout = QHBoxLayout()
         
-        # Gráfico de ventas por día
-        chart1_group = QGroupBox("Ventas por Día")
-        chart1_layout = QVBoxLayout()
-        self.figure1 = Figure(figsize=(10, 6))
-        self.canvas1 = FigureCanvas(self.figure1)
-        chart1_layout.addWidget(self.canvas1)
-        chart1_group.setLayout(chart1_layout)
-        charts_layout.addWidget(chart1_group)
+        # Contenedor para gráfico 1
+        chart1_container = QWidget()
+        chart1_layout = QVBoxLayout(chart1_container)
         
-        # Gráfico de métodos de pago
+        chart1_group = QGroupBox("Ventas por Día")
+        chart1_group_layout = QVBoxLayout()
+        
+        # CONFIGURACIÓN MEJORADA - Canvas más grande
+        self.figure1 = Figure(figsize=(5, 4), dpi=100)
+        self.canvas1 = FigureCanvas(self.figure1)
+        self.canvas1.setMinimumSize(450, 350)
+        self.canvas1.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
+        chart1_group_layout.addWidget(self.canvas1)
+        chart1_group.setLayout(chart1_group_layout)
+        chart1_layout.addWidget(chart1_group)
+        
+        charts_layout.addWidget(chart1_container)
+        
+        # Contenedor para gráfico 2
+        chart2_container = QWidget()
+        chart2_layout = QVBoxLayout(chart2_container)
+        
         chart2_group = QGroupBox("Métodos de Pago")
-        chart2_layout = QVBoxLayout()
-        self.figure2 = Figure(figsize=(10, 6))
+        chart2_group_layout = QVBoxLayout()
+        
+        # ✅ CONFIGURACIÓN MEJORADA
+        self.figure2 = Figure(figsize=(5, 4), dpi=100)
         self.canvas2 = FigureCanvas(self.figure2)
-        chart2_layout.addWidget(self.canvas2)
-        chart2_group.setLayout(chart2_layout)
-        charts_layout.addWidget(chart2_group)
+        self.canvas2.setMinimumSize(450, 350)
+        self.canvas2.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
+        chart2_group_layout.addWidget(self.canvas2)
+        chart2_group.setLayout(chart2_group_layout)
+        chart2_layout.addWidget(chart2_group)
+        
+        charts_layout.addWidget(chart2_container)
+        
+        # ✅ AÑADIR ESTRECHAJE PARA MEJOR DISTRIBUCIÓN
+        charts_layout.setStretch(0, 1)
+        charts_layout.setStretch(1, 1)
         
         layout.addLayout(charts_layout)
     
@@ -220,8 +245,10 @@ class SalesHistoryDialog(QDialog):
             for row, (id_, fecha, total, iva, metodo_pago, usuario, num_productos) in enumerate(ventas):
                 self.sales_table.setItem(row, 0, QTableWidgetItem(str(id_)))
                 self.sales_table.setItem(row, 1, QTableWidgetItem(fecha))
-                self.sales_table.setItem(row, 2, QTableWidgetItem(f"${total:.2f}"))
-                self.sales_table.setItem(row, 3, QTableWidgetItem(f"${iva:.2f}"))
+
+                self.sales_table.setItem(row, 2, QTableWidgetItem(formato_moneda_mx(total)))
+                self.sales_table.setItem(row, 3, QTableWidgetItem(formato_moneda_mx(iva)))
+
                 self.sales_table.setItem(row, 4, QTableWidgetItem(metodo_pago))
                 self.sales_table.setItem(row, 5, QTableWidgetItem(usuario))
                 self.sales_table.setItem(row, 6, QTableWidgetItem(str(num_productos)))
@@ -244,66 +271,183 @@ class SalesHistoryDialog(QDialog):
             
             metodos_text = ""
             for metodo, total, count in cursor.fetchall():
-                metodos_text += f"{metodo}: ${total:.2f} ({count} ventas)\n"
+                metodos_text += f"{metodo}: {formato_moneda_mx(total)} ({count} ventas)\n"
             
             self.summary_label.setText(
                 f"📊 PERIODO: {fecha_desde} a {fecha_hasta.split()[0]}\n"
-                f"💰 TOTAL VENTAS: ${total_ventas:.2f}\n"
-                f"📈 TOTAL IVA: ${total_iva:.2f}\n"
+                f"💰 TOTAL VENTAS: {formato_moneda_mx(total_ventas)}\n"
+                f"📈 TOTAL IVA: {formato_moneda_mx(total_iva)}\n"
                 f"🛒 N° VENTAS: {num_ventas}\n"
                 f"💳 MÉTODOS DE PAGO:\n{metodos_text}"
             )
             
             self.generar_graficos(fecha_desde, fecha_hasta)
             self.cargar_productos_vendidos(fecha_desde, fecha_hasta)
+            self.generar_graficos(fecha_desde, fecha_hasta)
     
     def generar_graficos(self, fecha_desde, fecha_hasta):
-        # Gráfico 1: Ventas por día
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT DATE(fecha), SUM(total), COUNT(*)
-                FROM ventas 
-                WHERE fecha BETWEEN ? AND ?
-                GROUP BY DATE(fecha)
-                ORDER BY DATE(fecha)
-            """, (fecha_desde, fecha_hasta))
+        """Genera gráficas - VERSIÓN DEFINITIVA CORREGIDA"""
+        try:
+            print(f"📊 Generando gráficas para {fecha_desde} a {fecha_hasta}")
             
-            datos = cursor.fetchall()
-            fechas = [d[0] for d in datos]
-            totales = [d[1] for d in datos]
-            cantidades = [d[2] for d in datos]
+            # GRÁFICO 1: Ventas por día
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT DATE(fecha), COALESCE(SUM(total), 0), COUNT(*)
+                    FROM ventas 
+                    WHERE fecha BETWEEN ? AND ? AND estado = 'completada'
+                    GROUP BY DATE(fecha)
+                    ORDER BY DATE(fecha)
+                """, (fecha_desde, fecha_hasta))
+                
+                datos = cursor.fetchall()
+                fechas = [d[0] for d in datos]
+                totales = [d[1] for d in datos]
         
-        self.figure1.clear()
-        ax1 = self.figure1.add_subplot(111)
-        ax1.bar(fechas, totales, color='skyblue', alpha=0.7)
-        ax1.set_title('Ventas por Día')
-        ax1.set_xlabel('Fecha')
-        ax1.set_ylabel('Total Ventas ($)')
-        ax1.tick_params(axis='x', rotation=45)
-        self.canvas1.draw()
-        
-        # Gráfico 2: Métodos de pago
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT metodo_pago, SUM(total), COUNT(*)
-                FROM ventas 
-                WHERE fecha BETWEEN ? AND ?
-                GROUP BY metodo_pago
-            """, (fecha_desde, fecha_hasta))
+            # CONFIGURACIÓN ROBUSTA GRÁFICO 1
+            self.figure1.clear()
+            self.figure1.set_size_inches(6, 4)
+            self.figure1.subplots_adjust(left=0.15, right=0.95, top=0.90, bottom=0.25)
             
-            metodos_data = cursor.fetchall()
+            ax1 = self.figure1.add_subplot(111)
+            
+            if datos and any(totales):
+                # Simplificar fechas para mejor visualización
+                fechas_simplificadas = []
+                for fecha in fechas:
+                    if isinstance(fecha, str) and len(fecha) > 10:
+                        fechas_simplificadas.append(fecha[5:10])  # MM-DD
+                    else:
+                        fechas_simplificadas.append(str(fecha))
+                
+                # Crear gráfico de barras
+                bars = ax1.bar(range(len(fechas)), totales, color='#3498db', alpha=0.7, width=0.6)
+                ax1.set_title('Ventas por Día', fontsize=12, fontweight='bold', pad=15)
+                ax1.set_xlabel('Fecha', fontsize=10, labelpad=10)
+                ax1.set_ylabel('Total Ventas ($)', fontsize=10, labelpad=10)
+                
+                # Configurar eje X
+                ax1.set_xticks(range(len(fechas)))
+                ax1.set_xticklabels(fechas_simplificadas, rotation=45, ha='right', fontsize=8)
+                
+                # Ajustar límites
+                max_val = max(totales) if totales else 1
+                ax1.set_ylim(0, max_val * 1.15)
+                ax1.grid(True, alpha=0.2, axis='y')
+                
+                # Agregar valores en las barras
+                for i, bar in enumerate(bars):
+                    height = bar.get_height()
+                    if height > 0:
+                        ax1.text(bar.get_x() + bar.get_width()/2., height + max_val*0.01,
+                                formato_moneda_mx(height).replace('$', ''), 
+                                ha='center', va='bottom', fontsize=8)
+            else:
+                # ✅ MENSAJE MEJORADO cuando no hay datos
+                ax1.text(0.5, 0.5, 'No hay ventas registradas\npara el período seleccionado', 
+                        ha='center', va='center', transform=ax1.transAxes, fontsize=12,
+                        style='italic', color='gray')
+                ax1.set_title('Ventas por Día', fontsize=12, fontweight='bold')
+                ax1.set_xticks([])
+                ax1.set_yticks([])
+            
+            # ACTUALIZAR CANVAS 1
+            self.canvas1.draw()
+            
+            # GRÁFICO 2: Métodos de pago
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT metodo_pago, COALESCE(SUM(total), 0), COUNT(*)
+                    FROM ventas 
+                    WHERE fecha BETWEEN ? AND ? AND estado = 'completada'
+                    GROUP BY metodo_pago
+                """, (fecha_desde, fecha_hasta))
+                
+                metodos_data = cursor.fetchall()
         
-        self.figure2.clear()
-        ax2 = self.figure2.add_subplot(111)
-        metodos = [d[0] for d in metodos_data]
-        totals = [d[1] for d in metodos_data]
-        colors = ['#ff9999', '#66b3ff', '#99ff99']
-        
-        ax2.pie(totals, labels=metodos, autopct='%1.1f%%', colors=colors)
-        ax2.set_title('Distribución por Método de Pago')
-        self.canvas2.draw()
+            # CONFIGURACIÓN ROBUSTA GRÁFICO 2
+            self.figure2.clear()
+            self.figure2.set_size_inches(6, 4)
+            self.figure2.subplots_adjust(left=0.05, right=0.85, top=0.90, bottom=0.1)
+            
+            ax2 = self.figure2.add_subplot(111)
+            
+            if metodos_data and any(d[1] > 0 for d in metodos_data):
+                metodos = [d[0] for d in metodos_data]
+                totals = [d[1] for d in metodos_data]
+                colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12']
+                
+                # Gráfico de pastel
+                wedges, texts, autotexts = ax2.pie(
+                    totals, 
+                    labels=metodos, 
+                    autopct=lambda p: f'{p:.1f}%' if p > 0 else '',
+                    colors=colors[:len(totals)],
+                    startangle=90,
+                    textprops={'fontsize': 9}
+                )
+                
+                for autotext in autotexts:
+                    autotext.set_color('white')
+                    autotext.set_fontweight('bold')
+                    autotext.set_fontsize(9)
+                
+                ax2.axis('equal')
+                ax2.set_title('Métodos de Pago', fontsize=12, fontweight='bold', pad=15)
+                
+            else:
+                # MENSAJE MEJORADO cuando no hay datos
+                ax2.text(0.5, 0.5, 'No hay ventas registradas\npara el período seleccionado', 
+                        ha='center', va='center', transform=ax2.transAxes, fontsize=12,
+                        style='italic', color='gray')
+                ax2.set_title('Métodos de Pago', fontsize=12, fontweight='bold')
+            
+            # ✅ ACTUALIZAR CANVAS 2
+            self.canvas2.draw()
+            
+            print("✅ Gráficas generadas exitosamente")
+            
+        except Exception as e:
+            print(f"❌ Error generando gráficos: {e}")
+            # MOSTRAR ERROR EN LAS GRÁFICAS
+            self.mostrar_error_graficas(str(e))
+
+    def mostrar_error_graficas(self, mensaje_error):
+        """Muestra mensaje de error en las gráficas"""
+        try:
+            self.figure1.clear()
+            ax1 = self.figure1.add_subplot(111)
+            ax1.text(0.5, 0.5, f'Error cargando gráficas:\n{mensaje_error}', 
+                    ha='center', va='center', transform=ax1.transAxes, fontsize=10,
+                    color='red')
+            self.canvas1.draw()
+            
+            self.figure2.clear()
+            ax2 = self.figure2.add_subplot(111)
+            ax2.text(0.5, 0.5, f'Error cargando gráficas:\n{mensaje_error}', 
+                    ha='center', va='center', transform=ax2.transAxes, fontsize=10,
+                    color='red')
+            self.canvas2.draw()
+        except:
+            pass
+
+    def mostrarEvent(self, event):
+        """Se ejecuta cuando la pestaña se muestra"""
+        super().showEvent(event)
+        # FORZAR REDIBUJADO CUANDO SE MUESTRA LA PESTAÑA
+        if hasattr(self, 'canvas1') and hasattr(self, 'canvas2'):
+            self.canvas1.update()
+            self.canvas2.update()
+            QTimer.singleShot(100, self.actualizar_graficos)
+
+    def actualizar_graficos(self):
+        """Forzar actualización de gráficos"""
+        if hasattr(self, 'canvas1'):
+            self.canvas1.draw()
+        if hasattr(self, 'canvas2'):
+            self.canvas2.draw()
     
     def cargar_productos_vendidos(self, fecha_desde, fecha_hasta):
         with self.db_manager.get_connection() as conn:
@@ -329,7 +473,8 @@ class SalesHistoryDialog(QDialog):
                 self.products_table.setItem(row, 0, QTableWidgetItem(nombre))
                 self.products_table.setItem(row, 1, QTableWidgetItem(categoria))
                 self.products_table.setItem(row, 2, QTableWidgetItem(str(int(cantidad))))
-                self.products_table.setItem(row, 3, QTableWidgetItem(f"${total:.2f}"))
+
+                self.products_table.setItem(row, 3, QTableWidgetItem(formato_moneda_mx(total)))
                 self.products_table.setItem(row, 4, QTableWidgetItem(ultima_venta.split()[0]))
                 
                 # Calcular tendencia
@@ -356,7 +501,7 @@ class SalesHistoryDialog(QDialog):
             
             detalle_text = f"Detalle de Venta #{venta_id}:\n\n"
             for nombre, cantidad, precio, subtotal in detalle:
-                detalle_text += f"{nombre} x{cantidad} - ${precio:.2f} = ${subtotal:.2f}\n"
+                detalle_text += f"{nombre} x{cantidad} - {formato_moneda_mx(precio)} = {formato_moneda_mx(subtotal)}\n"
             
             QMessageBox.information(self, "Detalle de Venta", detalle_text)
     
@@ -368,6 +513,6 @@ class SalesHistoryDialog(QDialog):
             'hasta': self.date_to.date().toString("yyyy-MM-dd")
         }
         
-        # ✅ CORRECCIÓN: Pasar db_manager como primer parámetro
+        # Pasar db_manager como primer parámetro
         dialog = ExportDialog(self.db_manager, 'ventas', date_range, self)
         dialog.exec()

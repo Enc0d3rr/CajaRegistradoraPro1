@@ -5,11 +5,15 @@ from PyQt6.QtWidgets import (
     QFormLayout, QGroupBox, QRadioButton, QButtonGroup
 )
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 import os
 import sys
 
 class ConfigPanelDialog(QDialog):
+
+    # SEÑAL PARA NOTIFICAR CAMBIOS
+    config_changed = pyqtSignal(dict)
+
     def __init__(self, db_manager, config, parent=None):
         super().__init__(parent)
 
@@ -103,14 +107,51 @@ class ConfigPanelDialog(QDialog):
         return tab
 
     def actualizar_logo(self):
-        """Actualizar visualización del logo"""
-        logo_path = self.config.get('logo_path', '')
-        if logo_path and os.path.exists(os.path.join('data', logo_path)):
-            pixmap = QPixmap(os.path.join('data', logo_path))
-            if not pixmap.isNull():
-                self.logo_label.setPixmap(pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio))
+        """Actualizar visualización del logo - VERSIÓN MEJORADA"""
+        try:
+            logo_path = self.config.get('logo_path', '')
+            
+            if not logo_path:
+                self.mostrar_logo_por_defecto()
                 return
-        self.logo_label.setText("Sin logo")
+                
+            full_logo_path = os.path.join('data', logo_path)
+            
+            if os.path.exists(full_logo_path):
+                pixmap = QPixmap(full_logo_path)
+                if not pixmap.isNull():
+                    # Redimensionar manteniendo aspecto
+                    pixmap_redimensionada = pixmap.scaled(
+                        100, 100, 
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    self.logo_label.setPixmap(pixmap_redimensionada)
+                    print(f"✅ Logo cargado: {logo_path}")
+                    return
+                else:
+                    print(f"❌ No se pudo cargar el logo: {logo_path}")
+            
+            # Si llegamos aquí, hay un problema con el logo
+            self.mostrar_logo_por_defecto()
+            
+        except Exception as e:
+            print(f"❌ Error actualizando logo: {e}")
+            self.mostrar_logo_por_defecto()
+
+    def mostrar_logo_por_defecto(self):
+        """Mostrar estado por defecto cuando no hay logo"""
+        nombre_negocio = self.config.get('nombre_negocio', 'Mi Negocio')
+        self.logo_label.setText(f"🏪\n{nombre_negocio[:15]}...")
+        self.logo_label.setStyleSheet("""
+            color: #7f8c8d; 
+            font-style: italic; 
+            font-weight: bold;
+            font-size: 10px;
+            text-align: center;
+            border: 1px dashed #bdc3c7;
+            padding: 5px;
+        """)
 
     def crear_pestaña_apariencia(self):
         """Crear pestaña de apariencia"""
@@ -315,34 +356,105 @@ class ConfigPanelDialog(QDialog):
                 QMessageBox.critical(self, "Error", f"No se pudo eliminar el usuario: {str(e)}")
 
     def seleccionar_logo(self):
-        """Seleccionar nuevo logo"""
+        """Seleccionar nuevo logo desde cualquier ubicación - VERSIÓN ROBUSTA"""
         try:
+            # Abrir diálogo para seleccionar imagen
             file_path, _ = QFileDialog.getOpenFileName(
-                self, "Seleccionar logo", "", 
-                "Imágenes (*.png *.jpg *.jpeg *.bmp *.ico)"
+                self, 
+                "Seleccionar logo del negocio", 
+                "",  # Directorio inicial (vacío = directorio por defecto)
+                "Imágenes (*.png *.jpg *.jpeg *.bmp *.ico *.svg);;Todos los archivos (*)"
             )
-            if file_path:
-                # Verificar que sea una imagen válida
+            
+            if not file_path:
+                return  # Usuario canceló la selección
+            
+            print(f"🖼️ Imagen seleccionada: {file_path}")
+                
+            # VERIFICAR QUE SEA UNA IMAGEN VÁLIDA
+            try:
                 from PIL import Image
-                try:
-                    with Image.open(file_path) as img:
-                        img.verify()
+                with Image.open(file_path) as img:
+                    img.verify()  # Verificar integridad del archivo
                     
-                    # Copiar logo
-                    import shutil
-                    logo_name = os.path.basename(file_path)
-                    dest_path = os.path.join('data', logo_name)
+                # Volver a abrir para obtener propiedades
+                with Image.open(file_path) as img:
+                    ancho, alto = img.size
+                    formato = img.format
+                    print(f"📐 Dimensiones: {ancho}x{alto}, Formato: {formato}")
+                    
+                    # RECOMENDACIÓN: Verificar tamaño máximo recomendado
+                    if ancho > 2000 or alto > 2000:
+                        respuesta = QMessageBox.question(
+                            self, 
+                            "Imagen muy grande", 
+                            f"La imagen seleccionada es muy grande ({ancho}x{alto}).\n"
+                            f"Se recomienda usar imágenes menores a 1000x1000 píxeles.\n\n"
+                            f"¿Desea continuar de todos modos?",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                        )
+                        if respuesta == QMessageBox.StandardButton.No:
+                            return
+                            
+            except Exception as img_error:
+                QMessageBox.warning(
+                    self, 
+                    "Archivo no válido", 
+                    f"El archivo seleccionado no es una imagen válida:\n{img_error}"
+                )
+                return
+
+            # COPIAR IMAGEN A LA CARPETA DATA CON NOMBRE ÚNICO
+            import shutil
+            from datetime import datetime
+            
+            # Crear nombre único para evitar sobreescribir
+            nombre_archivo = os.path.basename(file_path)
+            nombre_base, extension = os.path.splitext(nombre_archivo)
+            
+            # Si el archivo ya existe en data/, crear nombre único
+            dest_path = os.path.join('data', nombre_archivo)
+            contador = 1
+            while os.path.exists(dest_path):
+                # Verificar si es exactamente el mismo archivo
+                if os.path.abspath(file_path) == os.path.abspath(dest_path):
+                    print("✅ El archivo seleccionado ya está en la carpeta data/")
+                    break
+                # Si no es el mismo, crear nuevo nombre
+                nuevo_nombre = f"{nombre_base}_{contador}{extension}"
+                dest_path = os.path.join('data', nuevo_nombre)
+                contador += 1
+            else:
+                # Solo copiar si no es el mismo archivo
+                if os.path.abspath(file_path) != os.path.abspath(dest_path):
                     shutil.copy2(file_path, dest_path)
-                    
-                    self.config['logo_path'] = logo_name
-                    self.actualizar_logo()
-                    QMessageBox.information(self, "Éxito", "Logo actualizado correctamente")
-                        
-                except Exception as img_error:
-                    QMessageBox.warning(self, "Error", f"El archivo no es una imagen válida: {img_error}")
+                    print(f"✅ Logo copiado: {file_path} -> {dest_path}")
+                else:
+                    print("✅ Usando archivo existente en data/")
+
+            # ACTUALIZAR CONFIGURACIÓN CON EL NOMBRE DEL ARCHIVO (no la ruta completa)
+            nombre_final = os.path.basename(dest_path)
+            self.config['logo_path'] = nombre_final
+            
+            # ACTUALIZAR VISUALIZACIÓN DEL LOGO
+            self.actualizar_logo()
+            
+            # MOSTRAR CONFIRMACIÓN
+            QMessageBox.information(
+                self, 
+                "Logo actualizado", 
+                f"Logo del negocio actualizado correctamente.\n\n"
+                f"Archivo: {nombre_final}\n"
+                f"Tamaño: {ancho}x{alto} píxeles"
+            )
                     
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"No se pudo cargar el logo: {e}")
+            print(f"❌ Error inesperado: {e}")
+            QMessageBox.critical(
+                self, 
+                "Error", 
+                f"No se pudo cargar el logo:\n{str(e)}"
+            )
 
     def guardar_configuracion(self):
         """Guardar configuración"""
@@ -354,52 +466,39 @@ class ConfigPanelDialog(QDialog):
                 return
         
             try:
-                impuestos = float(self.impuestos_input.text())
+                # CORREGIDO: Usar impuestos_input (que es el campo real)
+                impuestos = float(self.impuestos_input.text() or 16.0)
                 if impuestos < 0 or impuestos > 100:
                     QMessageBox.warning(self, "Error", "Los impuestos deben estar entre 0 y 100%")
                     return
             except ValueError:
                 QMessageBox.warning(self, "Error", "Los impuestos deben ser un número válido")
                 return
-    
-            # Crear configuración
-            nueva_config = {
-                'nombre_negocio': nombre_negocio,
-                'moneda': self.moneda_combo.currentText(),
-                'impuestos': impuestos,
-                'logo_path': self.config.get('logo_path', ''),
-                'color_primario': self.config.get('color_primario', '#3498db'),
-                'color_secundario': self.config.get('color_secundario', '#2ecc71'),
-                'direccion': self.config.get('direccion', ''),
-                'telefono': self.config.get('telefono', ''),
-                'rfc': self.config.get('rfc', ''),
-                'tema': 'oscuro' if self.radio_oscuro.isChecked() else 'claro'
+
+            # DETERMINAR TEMA SELECCIONADO (de los radio buttons)
+            tema_seleccionado = 'oscuro' if self.radio_oscuro.isChecked() else 'claro'
+
+            # ACTUALIZAR CONFIGURACIÓN ACTUAL - USANDO LOS CAMPOS CORRECTOS
+            nuevo_config = {
+                'nombre_negocio': self.nombre_input.text(),
+                'tema': tema_seleccionado,  # ✅ CORREGIDO: Usar el tema de los radio buttons
+                'impuestos': impuestos,  # ✅ CORREGIDO: impuestos en lugar de iva
+                'moneda': self.moneda_combo.currentText(),  # ✅ CORREGIDO: moneda_combo en lugar de moneda_input
+                'logo_path': self.config.get('logo_path', ''),  # ✅ CORREGIDO: Usar self.config
+                'telefono': self.config.get('telefono', ''),    # ✅ CORREGIDO: Usar self.config
+                'direccion': self.config.get('direccion', '')   # ✅ CORREGIDO: Usar self.config
             }
-    
-            # Guardar
-            from config_manager import config_manager
-            if hasattr(config_manager, 'update_config'):
-                resultado = config_manager.update_config(nueva_config)
-            else:
-                import json
-                with open('data/config.json', 'w', encoding='utf-8') as f:
-                    json.dump(nueva_config, f, indent=4, ensure_ascii=False)
-                resultado = True
-    
-            if resultado:
-                tema = 'oscuro' if self.radio_oscuro.isChecked() else 'claro'
-                QMessageBox.information(
-                    self, "✅ Configuración Guardada",
-                    f"La configuración se ha guardado correctamente.\n\n"
-                    f"🎨 Tema seleccionado: {tema.upper()}\n\n"
-                    f"⚠️ Cierre y vuelva a abrir la aplicación para aplicar los cambios."
-                )
-                self.accept()
-            else:
-                QMessageBox.warning(self, "Error", "No se pudo guardar la configuración")
-        
+            
+            print(f"✅ Configuración a guardar: {nuevo_config}")  # Para debug
+            
+            # EMITIR SEÑAL CON LA NUEVA CONFIGURACIÓN
+            self.config_changed.emit(nuevo_config)
+            
+            QMessageBox.information(self, "Éxito", "Configuración guardada correctamente")
+            self.accept()
+            
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"Error al guardar: {str(e)}")
+            QMessageBox.critical(self, "Error", f"No se pudo guardar: {str(e)}")
 
     def get_updated_config(self):
         """Obtener configuración actualizada"""
@@ -407,6 +506,9 @@ class ConfigPanelDialog(QDialog):
             impuestos = float(self.impuestos_input.text())
         except ValueError:
             impuestos = self.config.get('impuestos', 16.0)
+        
+        # DETERMINAR TEMA SELECCIONADO (de los radio buttons)
+        tema_seleccionado = 'oscuro' if self.radio_oscuro.isChecked() else 'claro'
         
         return {
             'nombre_negocio': self.nombre_input.text().strip(),
@@ -418,5 +520,5 @@ class ConfigPanelDialog(QDialog):
             'direccion': self.config.get('direccion', ''),
             'telefono': self.config.get('telefono', ''),
             'rfc': self.config.get('rfc', ''),
-            'tema': 'oscuro' if self.radio_oscuro.isChecked() else 'claro'
-        }
+            'tema': tema_seleccionado  
+    }

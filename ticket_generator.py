@@ -1,7 +1,8 @@
-from datetime import datetime
 import json
 import os
 import sys
+from datetime import datetime
+from utils.helpers import formato_moneda_mx
 
 def get_app_directory():
     """
@@ -58,6 +59,7 @@ def generar_ticket(carrito, iva, total=None, metodo_pago="Efectivo", nombre_nego
 
     # Cálculos
     subtotal = sum(item['precio'] * item['cantidad'] for item in carrito)
+
     # detectar si 'iva' es tasa o monto
     if iva is None:
         iva_amount = 0.0
@@ -107,13 +109,15 @@ def generar_ticket(carrito, iva, total=None, metodo_pago="Efectivo", nombre_nego
         f.write(header + "\n")
         f.write(sep_dash + "\n")
 
-        # filas de productos
+        # ✅ CORREGIDO - filas de productos (SOLO el bucle, sin código fuera)
         for item in carrito:
             nombre = item['nombre'][:name_w]  # truncar si demasiado largo
             cantidad = int(item['cantidad'])
             precio = float(item['precio'])
             sub_item = precio * cantidad
-            line = f"{nombre:<{name_w}}{'':2}{cantidad:>{qty_w}}{'':2}{precio:>{price_w}.2f}{'':2}{sub_item:>{subtotal_w}.2f}"
+            
+            # Línea corregida
+            line = f"{nombre:<{name_w}}{'':2}{cantidad:>{qty_w}}{'':2}{formato_moneda_mx(precio).replace('$', ''):>{price_w}}{'':2}{formato_moneda_mx(sub_item).replace('$', ''):>{subtotal_w}}"
             f.write(line + "\n")
 
         f.write("\n")
@@ -122,10 +126,10 @@ def generar_ticket(carrito, iva, total=None, metodo_pago="Efectivo", nombre_nego
         # totales alineados a la derecha
         label_w = total_width - 12  # espacio reservado para la cifra final
         
-        f.write(f"{'Subtotal:':>{label_w}}{subtotal:>12.2f}\n")
+        f.write(f"{'Subtotal:':>{label_w}}{formato_moneda_mx(subtotal).replace('$', ''):>12}\n")
         if iva_rate > 0:
-            f.write(f"{'IVA (' + str(int(round(iva_rate*100))) + '%):':>{label_w}}{iva_amount:>12.2f}\n")
-        f.write(f"{'TOTAL:':>{label_w}}{total_calc:>12.2f}\n")
+            f.write(f"{'IVA (' + str(int(round(iva_rate*100))) + '%):':>{label_w}}{formato_moneda_mx(iva_amount).replace('$', ''):>12}\n")
+        f.write(f"{'TOTAL:':>{label_w}}{formato_moneda_mx(total_calc).replace('$', ''):>12}\n")
         
         # Nueva línea para método de pago
         f.write(f"{'Método de pago:':>{label_w}}{metodo_pago:>12}\n")

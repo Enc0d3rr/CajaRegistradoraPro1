@@ -25,6 +25,8 @@ class DatabaseManager:
             print("✅ Base de datos inicializada exitosamente")
         else:
             print("✅ Base de datos existente detectada")
+            # ✅ MIGRAR CONSTRAINTS SI ES NECESARIO
+            self.migrar_constraints()
     
     def tablas_existen(self):
         """Verifica si las tablas esenciales existen"""
@@ -68,22 +70,22 @@ class DatabaseManager:
                 )
             ''')
             
-            # Tabla de categorías
+            # Tabla de categorías - ✅ QUITAMOS UNIQUE para permitir reuso
             self.conn.execute('''
                 CREATE TABLE IF NOT EXISTS categorias (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    nombre TEXT UNIQUE NOT NULL,
+                    nombre TEXT NOT NULL,  -- ✅ QUITADO UNIQUE
                     descripcion TEXT,
                     color TEXT DEFAULT '#3498db',
                     activa INTEGER DEFAULT 1
                 )
             ''')
             
-            # Tabla de productos
+            # Tabla de productos - ✅ QUITAMOS UNIQUE para permitir reuso
             self.conn.execute('''
                 CREATE TABLE IF NOT EXISTS productos (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    codigo TEXT UNIQUE NOT NULL,
+                    codigo TEXT NOT NULL,  -- ✅ QUITADO UNIQUE
                     nombre TEXT NOT NULL,
                     descripcion TEXT,
                     precio REAL NOT NULL,
@@ -92,25 +94,15 @@ class DatabaseManager:
                     stock_minimo INTEGER DEFAULT 5,
                     categoria_id INTEGER,
                     activo INTEGER DEFAULT 1,
-                    codigo_barras TEXT UNIQUE,
+                    codigo_barras TEXT,  -- ✅ QUITADO UNIQUE
                     FOREIGN KEY (categoria_id) REFERENCES categorias (id)
                 )
             ''')
             
-            # Tabla de clientes
-            self.conn.execute('''
-                CREATE TABLE IF NOT EXISTS clientes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    nombre TEXT NOT NULL,
-                    telefono TEXT,
-                    email TEXT,
-                    direccion TEXT,
-                    rfc TEXT,
-                    fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
+            # ❌ ELIMINADA tabla de clientes (no se usa)
+            # CREATE TABLE IF NOT EXISTS clientes (...)
             
-            # Tabla de ventas
+            # Tabla de ventas - ✅ ACTUALIZADA sin referencia a clientes
             self.conn.execute('''
                 CREATE TABLE IF NOT EXISTS ventas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,10 +110,8 @@ class DatabaseManager:
                     total REAL NOT NULL,
                     iva REAL NOT NULL,
                     metodo_pago TEXT NOT NULL,
-                    cliente_id INTEGER,
                     usuario_id INTEGER NOT NULL,
                     estado TEXT DEFAULT 'completada',
-                    FOREIGN KEY (cliente_id) REFERENCES clientes (id),
                     FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
                 )
             ''')
@@ -165,11 +155,9 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS backups (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    nombre_archivo TEXT NOT NULL,
+                    archivo_path TEXT NOT NULL,
                     tamaño REAL NOT NULL,
-                    usuario_id INTEGER,
-                    observaciones TEXT,
-                    FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
+                    tipo TEXT NOT NULL
                 )
             ''')
             
@@ -183,11 +171,148 @@ class DatabaseManager:
                 )
             ''')
             
+            # ✅ CREAR ÍNDICES PARA MANTENER UNICIDAD SOLO EN ACTIVOS
+            self.crear_indices_unicos()
+            
             self.conn.commit()
             print("✅ Todas las tablas creadas exitosamente")
             
         except sqlite3.Error as e:
             print(f"❌ Error creando tablas: {e}")
+
+    def crear_indices_unicos(self):
+        """Crea índices únicos solo para registros activos"""
+        try:
+            # ✅ Índice único para códigos de productos ACTIVOS
+            self.conn.execute('''
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_productos_codigo_activo 
+                ON productos (codigo) 
+                WHERE activo = 1
+            ''')
+            
+            # ✅ Índice único para nombres de categorías ACTIVAS
+            self.conn.execute('''
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_categorias_nombre_activa 
+                ON categorias (nombre) 
+                WHERE activa = 1
+            ''')
+            
+            print("✅ Índices únicos creados para registros activos")
+            
+        except sqlite3.Error as e:
+            print(f"❌ Error creando índices: {e}")
+
+    def migrar_constraints(self):
+        """Migra las constraints únicas para permitir reuso de códigos"""
+        try:
+            cursor = self.conn.cursor()
+            
+            # 1. Verificar si necesitamos migrar productos
+            cursor.execute("PRAGMA index_list(productos)")
+            indices_productos = cursor.fetchall()
+            
+            # Buscar si existe el índice único antiguo
+            tiene_indice_antiguo = any('sqlite_autoindex' in idx[1] for idx in indices_productos)
+            
+            if tiene_indice_antiguo:
+                print("🔄 Migrando constraints de productos...")
+                self.migrar_tabla_productos()
+            
+            # 2. Verificar si necesitamos migrar categorías
+            cursor.execute("PRAGMA index_list(categorias)")
+            indices_categorias = cursor.fetchall()
+            
+            tiene_indice_antiguo_cat = any('sqlite_autoindex' in idx[1] for idx in indices_categorias)
+            
+            if tiene_indice_antiguo_cat:
+                print("🔄 Migrando constraints de categorías...")
+                self.migrar_tabla_categorias()
+                
+            # 3. Crear índices nuevos si no existen
+            self.crear_indices_unicos()
+            
+        except Exception as e:
+            print(f"❌ Error en migración: {e}")
+
+    def migrar_tabla_productos(self):
+        """Migra la tabla productos para quitar constraint única"""
+        try:
+            cursor = self.conn.cursor()
+            
+            # 1. Crear tabla temporal
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS productos_temp (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    codigo TEXT NOT NULL,
+                    nombre TEXT NOT NULL,
+                    descripcion TEXT,
+                    precio REAL NOT NULL,
+                    costo REAL DEFAULT 0,
+                    stock INTEGER DEFAULT 0,
+                    stock_minimo INTEGER DEFAULT 5,
+                    categoria_id INTEGER,
+                    activo INTEGER DEFAULT 1,
+                    codigo_barras TEXT,
+                    FOREIGN KEY (categoria_id) REFERENCES categorias (id)
+                )
+            ''')
+            
+            # 2. Copiar datos
+            cursor.execute('''
+                INSERT INTO productos_temp 
+                SELECT id, codigo, nombre, descripcion, precio, costo, stock, 
+                       stock_minimo, categoria_id, activo, codigo_barras
+                FROM productos
+            ''')
+            
+            # 3. Eliminar tabla vieja
+            cursor.execute('DROP TABLE productos')
+            
+            # 4. Renombrar tabla temporal
+            cursor.execute('ALTER TABLE productos_temp RENAME TO productos')
+            
+            self.conn.commit()
+            print("✅ Tabla productos migrada exitosamente")
+            
+        except Exception as e:
+            print(f"❌ Error migrando productos: {e}")
+            self.conn.rollback()
+
+    def migrar_tabla_categorias(self):
+        """Migra la tabla categorías para quitar constraint única"""
+        try:
+            cursor = self.conn.cursor()
+            
+            # 1. Crear tabla temporal
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS categorias_temp (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT NOT NULL,
+                    descripcion TEXT,
+                    color TEXT DEFAULT '#3498db',
+                    activa INTEGER DEFAULT 1
+                )
+            ''')
+            
+            # 2. Copiar datos
+            cursor.execute('''
+                INSERT INTO categorias_temp 
+                SELECT id, nombre, descripcion, color, activa
+                FROM categorias
+            ''')
+            
+            # 3. Eliminar tabla vieja
+            cursor.execute('DROP TABLE categorias')
+            
+            # 4. Renombrar tabla temporal
+            cursor.execute('ALTER TABLE categorias_temp RENAME TO categorias')
+            
+            self.conn.commit()
+            print("✅ Tabla categorías migrada exitosamente")
+            
+        except Exception as e:
+            print(f"❌ Error migrando categorías: {e}")
+            self.conn.rollback()
 
     def insert_initial_data(self):
         """Inserta datos iniciales para primer uso"""
@@ -268,15 +393,14 @@ class DatabaseManager:
         try:
             cursor = self.conn.cursor()
             
-            # Insertar venta principal
+            # Insertar venta principal - ✅ ACTUALIZADA sin cliente_id
             cursor.execute('''
-                INSERT INTO ventas (total, iva, metodo_pago, cliente_id, usuario_id, estado)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO ventas (total, iva, metodo_pago, usuario_id, estado)
+                VALUES (?, ?, ?, ?, ?)
             ''', (
                 venta_data['total'],
                 venta_data['iva'],
                 venta_data['metodo_pago'],
-                venta_data.get('cliente_id'),
                 venta_data['usuario_id'],
                 venta_data.get('estado', 'completada')
             ))
