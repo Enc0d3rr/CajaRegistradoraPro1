@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QPalette, QColor
 
-# ✅ Importar las nuevas funciones de rutas
+# Importar las nuevas funciones de rutas
 from paths import get_app_directory, get_backups_directory, ensure_directory_exists
 
 class BackupWorker(QThread):
@@ -27,7 +27,7 @@ class BackupWorker(QThread):
 
     def run(self):
         try:
-            # ✅ Usar ensure_directory_exists para crear directorio de backup
+            # Usar ensure_directory_exists para crear directorio de backup
             ensure_directory_exists(self.backup_dir)
             
             # Fecha y hora para el nombre del backup
@@ -142,13 +142,13 @@ class BackupWorker(QThread):
     def crear_registro_backup(self, backup_path):
         """Registra el backup en la base de datos"""
         try:
-            # ✅ LLAMAR A LA VERIFICACIÓN ANTES DE TODO
+            # LLAMAR A LA VERIFICACIÓN ANTES DE TODO
             self.verificar_y_corregir_tabla_backups()
             
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            # ✅ SOLO INSERTAR EL REGISTRO (la tabla ya está verificada)
+            # SOLO INSERTAR EL REGISTRO (la tabla ya está verificada)
             tamaño = os.path.getsize(backup_path) / (1024 * 1024)  # MB
             cursor.execute(
                 "INSERT INTO backups (archivo_path, tamaño, tipo) VALUES (?, ?, ?)",
@@ -374,7 +374,7 @@ class BackupManagerDialog(QDialog):
         super().__init__(parent)
         self.db_manager = db_manager
         
-        # ✅ USAR RUTAS ABSOLUTAS con el nuevo sistema
+        # USAR RUTAS ABSOLUTAS con el nuevo sistema
         app_dir = get_app_directory()
         self.db_path = os.path.join(app_dir, "caja_registradora.db")
         self.backup_dir = ensure_directory_exists(get_backups_directory())
@@ -408,7 +408,7 @@ class BackupManagerDialog(QDialog):
         dir_group = QGroupBox("Directorio de Backup")
         dir_layout = QVBoxLayout()
         
-        # ✅ Mostrar la ruta ABSOLUTA del directorio de backups
+        # Mostrar la ruta ABSOLUTA del directorio de backups
         self.lbl_backup_dir = QLabel(f"📦 {self.backup_dir}")
         self.lbl_backup_dir.setStyleSheet("font-size: 10px; color: #666;")
         self.lbl_backup_dir.setWordWrap(True)
@@ -495,7 +495,7 @@ class BackupManagerDialog(QDialog):
         self.auto_backup_timer.timeout.connect(self.verificar_auto_backup)
         self.auto_backup_timer.start(60000)
         
-        # ✅ VERIFICAR ESTRUCTURA AL INICIAR
+        # VERIFICAR ESTRUCTURA AL INICIAR
         self.verificar_estructura_backups()
 
     def verificar_estructura_backups(self):
@@ -532,7 +532,7 @@ class BackupManagerDialog(QDialog):
                 self.list_backups.addItem(f"{backup} ({size:.2f} MB) - {date.strftime('%Y-%m-%d %H:%M')}")
 
     def ejecutar_backup(self):
-        # ✅ VERIFICACIÓN ADICIONAL ANTES DE BACKUP
+        # VERIFICACIÓN ADICIONAL ANTES DE BACKUP
         self.verificar_estructura_backups()
         
         self.btn_backup.setEnabled(False)

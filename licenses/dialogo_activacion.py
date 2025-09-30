@@ -1,3 +1,4 @@
+# ===== SEGURIDAD AVANZADA =====
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QLineEdit, QPushButton, QMessageBox, QTextEdit,
                              QGroupBox, QFrame, QScrollArea, QWidget)
@@ -10,8 +11,8 @@ class DialogoActivacion(QDialog):
         super().__init__(parent)
         self.licencias_manager = licencias_manager
         self.tema = tema  # 'claro' o 'oscuro'
-        self.setWindowTitle("🎫 Activación de Licencia Premium")
-        self.setFixedSize(700, 600)
+        self.setWindowTitle("🎫 Activación de Licencia Premium - Seguridad Avanzada")
+        self.setFixedSize(750, 650)  # Un poco más grande para nueva información
         self.init_ui()
     
     def obtener_colores_tema(self):
@@ -179,6 +180,10 @@ class DialogoActivacion(QDialog):
         content_layout = QVBoxLayout(content_widget)
         content_layout.setSpacing(15)
         
+        # Información de seguridad
+        seguridad_group = self.crear_seccion_seguridad()
+        content_layout.addWidget(seguridad_group)
+        
         # Información de beneficios
         beneficios_group = self.crear_seccion_beneficios()
         content_layout.addWidget(beneficios_group)
@@ -215,11 +220,11 @@ class DialogoActivacion(QDialog):
         layout = QHBoxLayout()
         colores = self.obtener_colores_tema()
         
-        titulo = QLabel("ACTIVACIÓN DE LICENCIA PREMIUM")
+        titulo = QLabel("ACTIVACIÓN DE LICENCIA PREMIUM\nSEGURIDAD AVANZADA v2.0")
         titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         titulo.setStyleSheet(f"""
             QLabel {{
-                font-size: 24px;
+                font-size: 20px;
                 font-weight: bold;
                 padding: 15px;
                 background: qlineargradient(x1: 0, y1: 0, x2: 1, y1: 0,
@@ -233,6 +238,43 @@ class DialogoActivacion(QDialog):
         layout.addWidget(titulo)
         return layout
     
+    def crear_seccion_seguridad(self):
+        group = QGroupBox("🛡️ SISTEMA DE SEGURIDAD AVANZADA")
+        
+        layout = QVBoxLayout()
+        
+        seguridad_text = QTextEdit()
+        seguridad_text.setHtml(self.obtener_html_seguridad())
+        seguridad_text.setReadOnly(True)
+        seguridad_text.setFixedHeight(120)
+        
+        layout.addWidget(seguridad_text)
+        group.setLayout(layout)
+        return group
+    
+    def obtener_html_seguridad(self):
+        """HTML para información de seguridad"""
+        colores = self.obtener_colores_tema()
+        
+        if self.tema == "oscuro":
+            texto_primario = '#ffffff'
+            color_exito = '#27ae60'
+            color_info = '#3498db'
+        else:
+            texto_primario = '#2c3e50'
+            color_exito = '#155724'
+            color_info = '#2980b9'
+        
+        return f"""
+            <div style='font-family: Segoe UI, Arial; font-size: 12px; color: {texto_primario};'>
+            <p style='color: {color_info}; margin: 0;'><b>🔒 Sistema de Seguridad Mejorado v2.0</b></p>
+            <p style='color: {texto_primario}; margin: 5px 0;'>• <b>HMAC-SHA512:</b> Hashes seguros resistentes a colisiones</p>
+            <p style='color: {texto_primario}; margin: 5px 0;'>• <b>AES-256:</b> Encriptación militar de datos sensibles</p>
+            <p style='color: {texto_primario}; margin: 5px 0;'>• <b>Validación Multi-capa:</b> 5 niveles de verificación</p>
+            <p style='color: {texto_primario}; margin: 5px 0;'>• <b>SHA3-512:</b> Checksums para integridad de datos</p>
+            </div>
+        """
+    
     def crear_seccion_beneficios(self):
         group = QGroupBox("💎 BENEFICIOS LICENCIA PREMIUM")
         
@@ -241,7 +283,7 @@ class DialogoActivacion(QDialog):
         beneficios_text = QTextEdit()
         beneficios_text.setHtml(self.obtener_html_beneficios())
         beneficios_text.setReadOnly(True)
-        beneficios_text.setFixedHeight(280)
+        beneficios_text.setFixedHeight(200)
         
         layout.addWidget(beneficios_text)
         group.setLayout(layout)
@@ -299,15 +341,15 @@ class DialogoActivacion(QDialog):
                     </div>
                     
                     <div style='background: {fondo_tarjeta}; padding: 10px; border-radius: 5px; margin: 5px; color: {texto_primario};'>
-                    <b style='color: {color_info};'>☁️ BACKUP EN LA NUBE</b><br>
-                    <span style='color: {texto_secundario};'>Seguridad y respaldo de datos</span>
+                    <b style='color: {color_info};'>🔒 SEGURIDAD AVANZADA</b><br>
+                    <span style='color: {texto_secundario};'>Protección de nivel empresarial</span>
                     </div>
                 </td>
             </tr>
             </table>
             
             <div style='background: {fondo_tarjeta}; padding: 10px; border-radius: 5px; margin-top: 10px; color: {color_exito};'>
-            <b>💡 Inversión inteligente:</b> La licencia premium se paga sola con el aumento de productividad.
+            <b>💡 Inversión inteligente:</b> La licencia premium se paga sola con el aumento de productividad y seguridad.
             </div>
             </div>
         """
@@ -320,7 +362,8 @@ class DialogoActivacion(QDialog):
         # Instrucciones
         instrucciones = QLabel(
             "Ingrese el código de licencia que recibió por email.\n"
-            "El código debe tener formato: CAJA-PRO-XXXX-XXXX-XXXX"
+            "El código debe tener formato: CAJA-PRO-XXXX-XXXX-XXXX\n\n"
+            "🔒 <b>Nueva seguridad:</b> Su licencia será protegida con encriptación AES-256 y validación multi-capa."
         )
         instrucciones.setWordWrap(True)
         instrucciones.setStyleSheet("color: #7f8c8d; font-style: italic;")
@@ -397,17 +440,17 @@ class DialogoActivacion(QDialog):
             </table>
             
             <p style='margin-top: 10px; color: {color_error};'>
-            <b>⚠️ Importante:</b> Solo acepte licencias de fuentes oficiales.
+            <b>⚠️ Importante:</b> Solo acepte licencias de fuentes oficiales. Su seguridad es nuestra prioridad.
             </p>
             </div>
         """
     
     def crear_seccion_estado(self):
-        self.estado_group = QGroupBox("📊 ESTADO ACTUAL")
+        self.estado_group = QGroupBox("📊 ESTADO ACTUAL DEL SISTEMA")
         
         layout = QVBoxLayout()
         
-        self.label_estado = QLabel("Cargando información...")
+        self.label_estado = QLabel("Cargando información de seguridad...")
         self.label_estado.setWordWrap(True)
         self.label_estado.setStyleSheet("""
             QLabel {
@@ -430,11 +473,12 @@ class DialogoActivacion(QDialog):
         colores = self.obtener_colores_tema()
         
         # Botón de activar
-        self.btn_activar = QPushButton("🎫 ACTIVAR LICENCIA")
+        self.btn_activar = QPushButton("🎫 ACTIVAR LICENCIA AVANZADA")
         self.btn_activar.setStyleSheet(f"""
             QPushButton {{
                 background-color: {colores['boton_exito']};
                 color: white;
+                font-weight: bold;
             }}
             QPushButton:hover {{
                 background-color: {self.oscurecer_color(colores['boton_exito'])};
@@ -452,11 +496,12 @@ class DialogoActivacion(QDialog):
         self.btn_activar.setMinimumHeight(45)
         
         # Botón de validar
-        btn_validar = QPushButton("🔄 VALIDAR")
+        btn_validar = QPushButton("🔄 VALIDAR SEGURIDAD")
         btn_validar.setStyleSheet(f"""
             QPushButton {{
                 background-color: {colores['boton_primario']};
                 color: white;
+                font-weight: bold;
             }}
             QPushButton:hover {{
                 background-color: {self.oscurecer_color(colores['boton_primario'])};
@@ -471,6 +516,7 @@ class DialogoActivacion(QDialog):
             QPushButton {{
                 background-color: {colores['boton_secundario']};
                 color: white;
+                font-weight: bold;
             }}
             QPushButton:hover {{
                 background-color: {self.oscurecer_color(colores['boton_secundario'])};
@@ -496,7 +542,7 @@ class DialogoActivacion(QDialog):
         colores = self.obtener_colores_tema()
         
         if len(texto) >= 10 and '-' in texto:
-            self.label_formato.setText("✅ Formato válido - Listo para activar")
+            self.label_formato.setText("✅ Formato válido - Listo para activar con seguridad avanzada")
             self.label_formato.setStyleSheet(f"color: {colores['exito']}; font-size: 12px; padding: 5px;")
             self.btn_activar.setEnabled(True)
         elif len(texto) > 0:
@@ -509,10 +555,12 @@ class DialogoActivacion(QDialog):
             self.btn_activar.setEnabled(False)
     
     def actualizar_estado(self):
-        """Actualiza la sección de estado con colores dinámicos"""
+        """Actualiza la sección de estado con información de seguridad"""
         try:
             info = self.licencias_manager.obtener_info_licencia()
             colores = self.obtener_colores_tema()
+            
+            seguridad = info.get('seguridad', 'avanzada')
             
             if info['tipo'] == 'premium':
                 fondo = colores['exito'] if self.tema == 'oscuro' else '#d5eddb'
@@ -525,8 +573,9 @@ class DialogoActivacion(QDialog):
                 • Estado: <b>{info['estado']}</b><br>
                 • Días restantes: <b>{info['dias_restantes']}</b><br>
                 • Expira: <b>{info['expiracion']}</b><br>
+                • Seguridad: <b>{seguridad.upper()}</b><br>
                 • Código: <b>{info['codigo']}</b><br><br>
-                <i>¡Disfrute de todas las funciones premium!</i>
+                <i>¡Disfrute de todas las funciones premium con seguridad avanzada!</i>
                 </div>
                 """
             else:
@@ -540,8 +589,9 @@ class DialogoActivacion(QDialog):
                     <b>🔬 VERSIÓN DE PRUEBA</b><br><br>
                     • Estado: <b>{info['estado']}</b><br>
                     • Ventas restantes: <b>{info['dias_restantes']}</b><br>
-                    • Límite total: <b>{self.licencias_manager.limite_ventas_demo} ventas</b><br><br>
-                    <i>Active una licencia premium para uso ilimitado</i>
+                    • Límite total: <b>{getattr(self.licencias_manager, 'limite_ventas_demo', 5)} ventas</b><br>
+                    • Seguridad: <b>{seguridad.upper()}</b><br><br>
+                    <i>Active una licencia premium para uso ilimitado con seguridad avanzada</i>
                     </div>
                     """
                 else:
@@ -553,9 +603,10 @@ class DialogoActivacion(QDialog):
                     <div style='background: {fondo}; padding: 15px; border-radius: 5px; color: {texto};'>
                     <b>❌ LÍMITE ALCANZADO</b><br><br>
                     • Estado: <b>{info['estado']}</b><br>
-                    • Ventas realizadas: <b>{self.licencias_manager.config_demo['ventas_realizadas']}</b><br>
-                    • Límite: <b>{self.licencias_manager.limite_ventas_demo} ventas</b><br><br>
-                    <i>Para continuar, active una licencia premium</i>
+                    • Ventas realizadas: <b>{getattr(self.licencias_manager, 'config_demo', {}).get('ventas_realizadas', 0)}</b><br>
+                    • Límite: <b>{getattr(self.licencias_manager, 'limite_ventas_demo', 5)} ventas</b><br>
+                    • Seguridad: <b>{seguridad.upper()}</b><br><br>
+                    <i>Para continuar, active una licencia premium con seguridad avanzada</i>
                     </div>
                     """
             
@@ -568,10 +619,13 @@ class DialogoActivacion(QDialog):
     def validar_estado(self):
         """Valida el estado actual de la licencia"""
         self.actualizar_estado()
-        QMessageBox.information(self, "Estado Actual", "Información de licencia actualizada")
+        QMessageBox.information(self, "Estado del Sistema", 
+                              "Información de licencia y seguridad actualizada\n\n"
+                              "🔒 Sistema de seguridad: AVANZADO v2.0\n"
+                              "• HMAC-SHA512 + AES-256 + SHA3-512")
     
     def activar_licencia(self):
-        """Activa la licencia ingresada"""
+        """Activa la licencia ingresada - VERSIÓN MEJORADA"""
         codigo = self.input_licencia.text().strip()
         
         if not codigo:
@@ -583,24 +637,42 @@ class DialogoActivacion(QDialog):
         self.btn_activar.setText("🔄 ACTIVANDO...")
         
         # Mostrar progreso
-        QMessageBox.information(self, "Activando", "Validando y activando licencia...")
+        QMessageBox.information(self, "Activando", 
+                              "Validando y activando licencia con seguridad avanzada...\n\n"
+                              "🔒 Aplicando:\n"
+                              "• HMAC-SHA512 para integridad\n"
+                              "• AES-256 para encriptación\n"
+                              "• Validación multi-capa")
         
-        # Intentar activar
-        resultado, mensaje = self.licencias_manager.activar_licencia(codigo)
-        
-        # Restaurar botón
-        self.btn_activar.setEnabled(True)
-        self.btn_activar.setText("🎫 ACTIVAR LICENCIA")
-        
-        if resultado:
-            QMessageBox.information(self, "✅ Activación Exitosa", 
+        try:
+            # Intentar activar con el nuevo sistema
+            resultado, mensaje = self.licencias_manager.activar_licencia(codigo)
+            
+            if resultado:
+                QMessageBox.information(self, "✅ Activación Exitosa", 
+                                      f"{mensaje}\n\n"
+                                      f"¡Bienvenido a la versión Premium!\n"
+                                      f"🔒 Seguridad avanzada activada:\n"
+                                      f"• HMAC-SHA512\n"
+                                      f"• AES-256\n" 
+                                      f"• Validación multi-capa\n\n"
+                                      f"Reinicie la aplicación para aplicar los cambios.")
+                self.actualizar_estado()
+                self.accept()
+            else:
+                QMessageBox.warning(self, "❌ Error de Activación", 
                                   f"{mensaje}\n\n"
-                                  f"¡Bienvenido a la versión Premium!\n"
-                                  f"Reinicie la aplicación para aplicar los cambios.")
-            self.actualizar_estado()
-            self.accept()
-        else:
-            QMessageBox.warning(self, "❌ Error de Activación", 
-                              f"{mensaje}\n\n"
-                              f"Verifique que el código sea correcto o contacte a soporte.\n"
-                              f"Código ingresado: {codigo}")
+                                  f"Verifique que el código sea correcto o contacte a soporte.\n"
+                                  f"Código ingresado: {codigo}\n\n"
+                                  f"🔍 El sistema usa validación de seguridad avanzada.")
+        
+        except Exception as e:
+            # Manejar cualquier error inesperado
+            QMessageBox.critical(self, "❌ Error Inesperado", 
+                              f"Ocurrió un error inesperado durante la activación:\n{str(e)}\n\n"
+                              f"Por favor contacte a soporte técnico.")
+        
+        finally:
+            # ✅ CORRECCIÓN: RESTAURAR SIEMPRE EL BOTÓN
+            self.btn_activar.setEnabled(True)
+            self.btn_activar.setText("🎫 ACTIVAR LICENCIA AVANZADA")

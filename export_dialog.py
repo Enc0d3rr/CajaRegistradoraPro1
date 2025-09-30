@@ -7,7 +7,7 @@ from PyQt6.QtCore import Qt
 import os
 import csv
 from datetime import datetime
-from utils.helpers import formato_moneda_mx  # ✅ IMPORTACIÓN AÑADIDA
+from utils.helpers import formato_moneda_mx  
 
 class ExportDialog(QDialog):
     def __init__(self, db_manager, report_type, date_range, parent=None):

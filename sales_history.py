@@ -294,11 +294,11 @@ class SalesHistoryDialog(QDialog):
             with self.db_manager.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT DATE(fecha), COALESCE(SUM(total), 0), COUNT(*)
-                    FROM ventas 
-                    WHERE fecha BETWEEN ? AND ? AND estado = 'completada'
-                    GROUP BY DATE(fecha)
-                    ORDER BY DATE(fecha)
+                    SELECT DATE(v.fecha), COALESCE(SUM(v.total), 0), COUNT(*)
+                    FROM ventas v
+                    WHERE v.fecha BETWEEN ? AND ? AND v.estado = 'completada'
+                    GROUP BY DATE(v.fecha)
+                    ORDER BY DATE(v.fecha)
                 """, (fecha_desde, fecha_hasta))
                 
                 datos = cursor.fetchall()

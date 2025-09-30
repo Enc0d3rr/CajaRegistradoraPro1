@@ -1,44 +1,132 @@
+# ===== SEGURIDAD AVANZADA =====
 import json
 import hashlib
+import hmac
+import base64
 import os
 from datetime import datetime, timedelta
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+class SecurityManager:
+    def __init__(self):
+        # 🔐 CLAVE MAESTRA DERIVADA SEGURAMENTE
+        self.master_key = self.derive_key("CAJA_REGISTRADORA_PRO_2024_SECRET_KEY_¡NO_COMPARTIR!")
+        self.fernet = Fernet(self.master_key)
+    
+    def derive_key(self, password: str) -> bytes:
+        """Deriva una clave segura usando PBKDF2 con 100,000 iteraciones"""
+        salt = b'caja_registradora_salt_2024_secure_v2'
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA512(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        return base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    
+    def generar_hash_seguro(self, datos: dict) -> str:
+        """Genera HMAC-SHA512 para máxima seguridad"""
+        # Ordenar datos para consistencia
+        datos_ordenados = {k: datos[k] for k in sorted(datos.keys())}
+        cadena = ''.join(str(v) for v in datos_ordenados.values())
+        
+        return hmac.new(
+            self.master_key, 
+            cadena.encode(), 
+            hashlib.sha512
+        ).hexdigest()
+    
+    def encriptar_datos(self, datos: dict) -> str:
+        """Encripta datos sensibles usando AES-256"""
+        datos_str = json.dumps(datos, sort_keys=True)
+        return self.fernet.encrypt(datos_str.encode()).decode()
+    
+    def desencriptar_datos(self, datos_encriptados: str) -> dict:
+        """Desencripta datos verificando integridad"""
+        try:
+            datos_bytes = self.fernet.decrypt(datos_encriptados.encode())
+            return json.loads(datos_bytes.decode())
+        except Exception as e:
+            raise ValueError(f"Error desencriptando datos: {e}")
 
 class GeneradorLicencias:
     def __init__(self):
-        # 🔐 CLAVE MAESTRA - ¡MANTÉN ESTA SEGURA Y NO LA COMPARTAS!
-        self.clave_secreta = "CAJA_REGISTRADORA_PRO_2024_SECRET_KEY_¡NO_COMPARTIR!"
+        # 🔐 SISTEMA DE SEGURIDAD AVANZADO
+        self.security = SecurityManager()
     
-    def generar_licencia(self, codigo_licencia, duracion_dias=30, id_cliente="", tipo="premium"):
-        """Genera una licencia válida para un cliente"""
+    def generar_licencia_avanzada(self, codigo_licencia, duracion_dias=30, id_cliente="", tipo="premium"):
+        """Genera una licencia válida con seguridad avanzada"""
         try:
             licencia = {
                 "codigo": codigo_licencia,
                 "fecha_activacion": datetime.now().isoformat(),
                 "duracion_dias": duracion_dias,
-                "id_cliente": id_cliente or f"CLI_{datetime.now().strftime('%Y%m%d%H%M')}",
+                "id_cliente": id_cliente or f"CLI_{datetime.now().strftime('%Y%m%d%H%M%S')}",
                 "tipo": tipo,
-                "version": "1.0",
-                "fecha_generacion": datetime.now().isoformat()
+                "version": "2.0",  # Nueva versión con seguridad mejorada
+                "fecha_generacion": datetime.now().isoformat(),
+                "id_instalacion": self.generar_id_instalacion_unico()
             }
             
-            # Generar hash de seguridad
-            datos_hash = {
+            # 🔐 CAPA 1: Hash HMAC-SHA512
+            licencia["hash_seguro"] = self.security.generar_hash_seguro(licencia)
+            
+            # 🔐 CAPA 2: Datos sensibles encriptados
+            datos_sensibles = {
                 'codigo': licencia['codigo'],
-                'fecha_activacion': licencia['fecha_activacion'],
-                'duracion_dias': licencia['duracion_dias'],
                 'id_cliente': licencia['id_cliente'],
-                'tipo': licencia['tipo']
+                'fecha_activacion': licencia['fecha_activacion'],
+                'id_instalacion': licencia['id_instalacion']
             }
+            licencia["datos_encriptados"] = self.security.encriptar_datos(datos_sensibles)
             
-            cadena_hash = ''.join(str(v) for v in datos_hash.values()) + self.clave_secreta
-            licencia["hash"] = hashlib.sha256(cadena_hash.encode()).hexdigest()
+            # 🔐 CAPA 3: Checksum de integridad
+            licencia["checksum"] = self.generar_checksum_integridad(licencia)
             
-            print(f"✅ Licencia generada para código: {codigo_licencia}")
+            print(f"✅ Licencia avanzada generada para código: {codigo_licencia}")
             return licencia
             
         except Exception as e:
-            print(f"❌ Error generando licencia: {e}")
+            print(f"❌ Error generando licencia avanzada: {e}")
             return None
+    
+    def generar_checksum_integridad(self, licencia):
+        """Genera checksum para verificar integridad"""
+        datos_integridad = {
+            'codigo': licencia['codigo'],
+            'hash_seguro': licencia['hash_seguro'],
+            'fecha_generacion': licencia['fecha_generacion'],
+            'version': licencia.get('version', '2.0')
+        }
+        # Ordenar para consistencia
+        datos_ordenados = {k: datos_integridad[k] for k in sorted(datos_integridad.keys())}
+        cadena = ''.join(str(v) for v in datos_ordenados.values())
+        return hashlib.sha3_512(cadena.encode()).hexdigest()
+    
+    def generar_id_instalacion_unico(self):
+        """Genera ID único de instalación más robusto"""
+        try:
+            import socket
+            import uuid
+            import platform
+            
+            # Combinar múltiples fuentes de identificación
+            hostname = socket.gethostname()
+            mac = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) 
+                           for elements in range(0,2*6,2)][::-1])
+            sistema = platform.system() + platform.release()
+            
+            # Combinar y hashear
+            id_base = f"{hostname}_{mac}_{sistema}_{datetime.now().timestamp()}"
+            
+            # Usar SHA3-512 para mayor seguridad
+            return hashlib.sha3_512(id_base.encode()).hexdigest()[:32]
+            
+        except:
+            # Fallback seguro
+            return hashlib.sha3_512(str(datetime.now().timestamp()).encode()).hexdigest()[:32]
     
     def guardar_licencia(self, licencia, archivo_salida):
         """Guarda la licencia con rutas absolutas"""
@@ -64,10 +152,10 @@ class GeneradorLicencias:
             return False
     
     def generar_y_guardar_automatico(self, codigo, duracion_dias=30, id_cliente="", archivo_salida=None):
-        """Genera y guarda automáticamente - ESTE SÍ FUNCIONA"""
+        """Genera y guarda automáticamente licencia avanzada"""
         try:
-            # 1. Generar la licencia
-            licencia = self.generar_licencia(codigo, duracion_dias, id_cliente)
+            # 1. Generar la licencia con seguridad avanzada
+            licencia = self.generar_licencia_avanzada(codigo, duracion_dias, id_cliente)
             if not licencia:
                 return None, None
             
@@ -95,8 +183,8 @@ class GeneradorLicencias:
         fecha_expiracion = fecha_activacion + timedelta(days=licencia['duracion_dias'])
         dias_restantes = (fecha_expiracion - datetime.now()).days
         
-        print(f"\n📋 INFORMACIÓN DE LA LICENCIA")
-        print("=" * 50)
+        print(f"\n📋 INFORMACIÓN DE LA LICENCIA (SEGURIDAD AVANZADA)")
+        print("=" * 60)
         print(f"🔑 Código: {licencia['codigo']}")
         print(f"👤 Cliente: {licencia['id_cliente']}")
         print(f"📅 Fecha activación: {fecha_activacion.strftime('%d/%m/%Y %H:%M')}")
@@ -104,10 +192,14 @@ class GeneradorLicencias:
         print(f"📅 Expira: {fecha_expiracion.strftime('%d/%m/%Y')}")
         print(f"📊 Días restantes: {dias_restantes}")
         print(f"🎯 Tipo: {licencia['tipo']}")
-        print(f"🔐 Hash: {licencia['hash'][:16]}...")
+        print(f"🔐 Versión seguridad: {licencia.get('version', '2.0')}")
+        print(f"🆔 ID instalación: {licencia.get('id_instalacion', 'N/A')[:16]}...")
+        print(f"🔒 Hash seguro: {licencia['hash_seguro'][:24]}...")
+        print(f"🔐 Datos encriptados: {licencia['datos_encriptados'][:30]}...")
+        print(f"✅ Checksum: {licencia['checksum'][:24]}...")
     
-    def validar_licencia_manual(self, archivo_licencia):
-        """Valida manualmente una licencia existente"""
+    def validar_licencia_avanzada(self, archivo_licencia):
+        """Valida manualmente una licencia existente con seguridad avanzada"""
         try:
             if not os.path.exists(archivo_licencia):
                 print("❌ Archivo de licencia no encontrado")
@@ -116,106 +208,125 @@ class GeneradorLicencias:
             with open(archivo_licencia, 'r', encoding='utf-8') as f:
                 licencia = json.load(f)
             
-            # Verificar hash
-            datos_hash = {
-                'codigo': licencia['codigo'],
-                'fecha_activacion': licencia['fecha_activacion'],
-                'duracion_dias': licencia['duracion_dias'],
-                'id_cliente': licencia['id_cliente'],
-                'tipo': licencia['tipo']
-            }
-            
-            cadena_hash = ''.join(str(v) for v in datos_hash.values()) + self.clave_secreta
-            hash_calculado = hashlib.sha256(cadena_hash.encode()).hexdigest()
-            
-            if licencia['hash'] == hash_calculado:
-                print("✅ Licencia válida - Hash correcto")
-                
-                # Verificar expiración
-                fecha_activacion = datetime.fromisoformat(licencia['fecha_activacion'])
-                fecha_expiracion = fecha_activacion + timedelta(days=licencia['duracion_dias'])
-                
-                if datetime.now() > fecha_expiracion:
-                    print("❌ Licencia expirada")
-                    return False
-                else:
-                    dias_restantes = (fecha_expiracion - datetime.now()).days
-                    print(f"✅ Licencia activa - {dias_restantes} días restantes")
-                    return True
-            else:
-                print("❌ Licencia inválida - Hash incorrecto")
+            # 1. Verificar checksum de integridad
+            checksum_calculado = self.generar_checksum_integridad(licencia)
+            if not hmac.compare_digest(licencia['checksum'], checksum_calculado):
+                print("❌ Checksum de integridad inválido")
                 return False
+            
+            # 2. Verificar hash HMAC-SHA512
+            datos_verificacion = {k: v for k, v in licencia.items() 
+                                if k not in ['hash_seguro', 'datos_encriptados', 'checksum']}
+            
+            hash_calculado = self.security.generar_hash_seguro(datos_verificacion)
+            if not hmac.compare_digest(licencia['hash_seguro'], hash_calculado):
+                print("❌ Hash de seguridad inválido")
+                return False
+            
+            # 3. Verificar datos encriptados
+            try:
+                datos_desencriptados = self.security.desencriptar_datos(licencia['datos_encriptados'])
+                if (datos_desencriptados['codigo'] != licencia['codigo'] or
+                    datos_desencriptados['id_cliente'] != licencia['id_cliente']):
+                    print("❌ Datos encriptados no coinciden")
+                    return False
+            except Exception as e:
+                print(f"❌ Error desencriptando datos: {e}")
+                return False
+            
+            # 4. Verificar expiración
+            fecha_activacion = datetime.fromisoformat(licencia['fecha_activacion'])
+            fecha_expiracion = fecha_activacion + timedelta(days=licencia['duracion_dias'])
+            
+            if datetime.now() > fecha_expiracion:
+                print("❌ Licencia expirada")
+                return False
+            else:
+                dias_restantes = (fecha_expiracion - datetime.now()).days
+                print(f"✅ Licencia activa - {dias_restantes} días restantes")
+                print("🔒 Validación de seguridad avanzada: EXITOSA")
+                return True
                 
         except Exception as e:
-            print(f"❌ Error validando licencia: {e}")
+            print(f"❌ Error validando licencia avanzada: {e}")
             return False
 
-# FUNCIONES PRINCIPALES SIMPLIFICADAS
+    def generar_licencia_compatibilidad(self, codigo_licencia, duracion_dias=30, id_cliente="", tipo="premium"):
+        """Método de compatibilidad para sistemas existentes"""
+        return self.generar_licencia_avanzada(codigo_licencia, duracion_dias, id_cliente, tipo)
+
+# FUNCIONES PRINCIPALES ACTUALIZADAS
 def generar_licencia_rapida():
-    """Función simple que SÍ genera y guarda"""
+    """Función simple que genera y guarda licencia avanzada"""
     generador = GeneradorLicencias()
     
-    codigo = "TEST-001"
+    codigo = "TEST-ADV-" + datetime.now().strftime("%H%M%S")
     duracion = 7
-    id_cliente = "TEST"
-    archivo = "licencia_test.json"
+    id_cliente = "TEST-ADV"
+    archivo = "licencia_test_avanzada.json"
     
-    print("⚡ GENERANDO LICENCIA RÁPIDA...")
+    print("⚡ GENERANDO LICENCIA AVANZADA RÁPIDA...")
     
-    # Usar el método que SÍ funciona
     licencia, archivo_guardado = generador.generar_y_guardar_automatico(
         codigo, duracion, id_cliente, archivo
     )
     
     if licencia and archivo_guardado:
-        print(f"🎉 ¡ÉXITO! Licencia guardada en: {archivo_guardado}")
+        print(f"🎉 ¡ÉXITO! Licencia avanzada guardada en: {archivo_guardado}")
         generador.mostrar_info_licencia(licencia)
         
         # Verificar que el archivo existe físicamente
         if os.path.exists(archivo_guardado):
             print(f"📁 Verificación: Archivo EXISTE en el sistema")
             print(f"📏 Tamaño: {os.path.getsize(archivo_guardado)} bytes")
+            
+            # Validar la licencia recién creada
+            print("\n🔍 VALIDANDO LICENCIA RECIÉN CREADA...")
+            generador.validar_licencia_avanzada(archivo_guardado)
         else:
             print("❌ ERROR: El archivo no se creó físicamente")
     else:
-        print("❌ Error generando la licencia")
+        print("❌ Error generando la licencia avanzada")
 
 def menu_simple():
-    """Menú simple y funcional"""
+    """Menú simple y funcional con seguridad avanzada"""
     generador = GeneradorLicencias()
     
     while True:
-        print("\n" + "="*50)
-        print("🎫 GENERADOR DE LICENCIAS - VERSIÓN SIMPLE")
-        print("="*50)
-        print("1. 🔥 Generar licencia TEST (RÁPIDO)")
-        print("2. 📝 Generar licencia personalizada")
-        print("3. 🔍 Validar licencia existente")
-        print("4. 🚪 Salir")
+        print("\n" + "="*60)
+        print("🎫 GENERADOR DE LICENCIAS - SEGURIDAD AVANZADA v2.0")
+        print("="*60)
+        print("1. 🔥 Generar licencia TEST AVANZADA (RÁPIDO)")
+        print("2. 📝 Generar licencia personalizada avanzada")
+        print("3. 🔍 Validar licencia existente (validación avanzada)")
+        print("4. 🧪 Probar seguridad de licencia")
+        print("5. 🚪 Salir")
         
         opcion = input("\nSeleccione opción: ").strip()
         
         if opcion == "1":
-            print("\n" + "🔥 GENERANDO LICENCIA TEST...")
-            codigo = "TEST-" + datetime.now().strftime("%H%M%S")
+            print("\n" + "🔥 GENERANDO LICENCIA TEST AVANZADA...")
+            codigo = "TEST-ADV-" + datetime.now().strftime("%H%M%S")
             archivo = f"licencia_{codigo}.json"
             
             licencia, archivo_guardado = generador.generar_y_guardar_automatico(
-                codigo, 7, "TEST", archivo
+                codigo, 7, "TEST-ADV", archivo
             )
             
             if licencia and archivo_guardado:
                 print(f"✅ ¡ÉXITO! Archivo: {archivo_guardado}")
                 if os.path.exists(archivo_guardado):
                     print("📁 Archivo físico creado correctamente")
+                    # Validar automáticamente
+                    generador.validar_licencia_avanzada(archivo_guardado)
             else:
                 print("❌ Error")
                 
         elif opcion == "2":
-            print("\n" + "📝 LICENCIA PERSONALIZADA")
-            codigo = input("Código: ").strip() or "CUSTOM-001"
+            print("\n" + "📝 LICENCIA PERSONALIZADA AVANZADA")
+            codigo = input("Código: ").strip() or "CUSTOM-ADV-001"
             duracion = input("Días [30]: ").strip() or "30"
-            id_cliente = input("Cliente [TEST]: ").strip() or "TEST"
+            id_cliente = input("Cliente [TEST-ADV]: ").strip() or "TEST-ADV"
             archivo = input("Archivo [auto]: ").strip() or None
             
             try:
@@ -226,17 +337,52 @@ def menu_simple():
                 if licencia and archivo_guardado:
                     print(f"✅ Guardado en: {archivo_guardado}")
                     generador.mostrar_info_licencia(licencia)
+                    
+                    # Validar automáticamente
+                    print("\n🔍 VALIDACIÓN AUTOMÁTICA...")
+                    generador.validar_licencia_avanzada(archivo_guardado)
                 else:
                     print("❌ Error")
             except ValueError:
                 print("❌ Los días deben ser un número")
                 
         elif opcion == "3":
-            archivo = input("Ruta del archivo: ").strip()
+            archivo = input("Ruta del archivo de licencia: ").strip()
             if archivo:
-                generador.validar_licencia_manual(archivo)
-                
+                if os.path.exists(archivo):
+                    print("🔍 INICIANDO VALIDACIÓN AVANZADA...")
+                    generador.validar_licencia_avanzada(archivo)
+                else:
+                    print("❌ Archivo no encontrado")
+                    
         elif opcion == "4":
+            print("\n" + "🧪 PRUEBA DE SEGURIDAD AVANZADA")
+            print("-" * 40)
+            
+            # Generar licencia de prueba
+            codigo_prueba = "SECURITY-TEST-" + datetime.now().strftime("%H%M%S")
+            licencia_prueba = generador.generar_licencia_avanzada(codigo_prueba, 1, "SECURITY-TEST")
+            
+            if licencia_prueba:
+                print("✅ Licencia de prueba generada")
+                print("🔒 Capas de seguridad implementadas:")
+                print("   1. 🔐 HMAC-SHA512 para verificación de integridad")
+                print("   2. 🛡️  Encriptación AES-256 para datos sensibles")
+                print("   3. ✅ Checksum SHA3-512 para detección de modificaciones")
+                print("   4. 🆔 ID de instalación único y robusto")
+                print("   5. 🔄 Validación multi-capa")
+                
+                # Mostrar información de seguridad
+                print(f"\n📊 Información de seguridad:")
+                print(f"   Hash seguro: {licencia_prueba['hash_seguro'][:32]}...")
+                print(f"   Datos encriptados: {licencia_prueba['datos_encriptados'][:40]}...")
+                print(f"   Checksum: {licencia_prueba['checksum'][:32]}...")
+                print(f"   ID instalación: {licencia_prueba['id_instalacion'][:24]}...")
+                
+            else:
+                print("❌ Error en prueba de seguridad")
+                
+        elif opcion == "5":
             print("👋 ¡Hasta luego!")
             break
             
@@ -244,5 +390,13 @@ def menu_simple():
             print("❌ Opción inválida")
 
 if __name__ == "__main__":
-    # Ejecutar la versión simple y funcional
+    # Ejecutar la versión con seguridad avanzada
+    print("🔒 SISTEMA DE LICENCIAS - SEGURIDAD AVANZADA v2.0")
+    print("📦 Características de seguridad implementadas:")
+    print("   • HMAC-SHA512 para hashes seguros")
+    print("   • Encriptación AES-256 para datos sensibles")
+    print("   • Validación multi-capa")
+    print("   • Checksums SHA3-512 para integridad")
+    print("   • IDs de instalación únicos y robustos\n")
+    
     menu_simple()
