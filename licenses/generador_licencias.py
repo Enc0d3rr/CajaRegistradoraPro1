@@ -56,36 +56,43 @@ class GeneradorLicencias:
         # 🔐 SISTEMA DE SEGURIDAD AVANZADO
         self.security = SecurityManager()
     
-    def generar_licencia_avanzada(self, codigo_licencia, duracion_dias=30, id_cliente="", tipo="premium"):
-        """Genera una licencia válida con seguridad avanzada"""
+    def generar_licencia_avanzada(self, codigo_licencia, duracion_dias=30, id_cliente="", tipo="premium", equipo_id=None):
+        """Genera una licencia válida con seguridad avanzada - VERSIÓN CON EQUIPO_ID"""
         try:
+            # AGREGAR EQUIPO_ID (si no se proporciona, generar uno)
+            if equipo_id is None:
+                equipo_id = self.generar_id_instalacion_unico()
+            
             licencia = {
                 "codigo": codigo_licencia,
                 "fecha_activacion": datetime.now().isoformat(),
                 "duracion_dias": duracion_dias,
                 "id_cliente": id_cliente or f"CLI_{datetime.now().strftime('%Y%m%d%H%M%S')}",
                 "tipo": tipo,
-                "version": "2.0",  # Nueva versión con seguridad mejorada
+                "version": "2.1",  # ✅ NUEVA VERSIÓN CON EQUIPO_ID
                 "fecha_generacion": datetime.now().isoformat(),
-                "id_instalacion": self.generar_id_instalacion_unico()
+                "id_instalacion": self.generar_id_instalacion_unico(),
+                "equipo_id": equipo_id  # ✅ NUEVO CAMPO CRÍTICO
             }
             
-            # 🔐 CAPA 1: Hash HMAC-SHA512
+            # 🔐 CAPA 1: Hash HMAC-SHA512 (INCLUYE EQUIPO_ID)
             licencia["hash_seguro"] = self.security.generar_hash_seguro(licencia)
             
-            # 🔐 CAPA 2: Datos sensibles encriptados
+            # 🔐 CAPA 2: Datos sensibles encriptados (INCLUYE EQUIPO_ID)
             datos_sensibles = {
                 'codigo': licencia['codigo'],
                 'id_cliente': licencia['id_cliente'],
                 'fecha_activacion': licencia['fecha_activacion'],
-                'id_instalacion': licencia['id_instalacion']
+                'id_instalacion': licencia['id_instalacion'],
+                'equipo_id': licencia['equipo_id']  # ✅ INCLUIR EN DATOS ENCRIPTADOS
             }
             licencia["datos_encriptados"] = self.security.encriptar_datos(datos_sensibles)
             
-            # 🔐 CAPA 3: Checksum de integridad
+            # 🔐 CAPA 3: Checksum de integridad (INCLUYE EQUIPO_ID)
             licencia["checksum"] = self.generar_checksum_integridad(licencia)
             
             print(f"✅ Licencia avanzada generada para código: {codigo_licencia}")
+            print(f"🖥️  VINCULADA al equipo: {equipo_id[:16]}...")
             return licencia
             
         except Exception as e:
@@ -151,11 +158,11 @@ class GeneradorLicencias:
             print(f"❌ Error guardando licencia: {e}")
             return False
     
-    def generar_y_guardar_automatico(self, codigo, duracion_dias=30, id_cliente="", archivo_salida=None):
-        """Genera y guarda automáticamente licencia avanzada"""
+    def generar_y_guardar_automatico(self, codigo, duracion_dias=30, id_cliente="", archivo_salida=None, equipo_id=None):
+        """Genera y guarda automáticamente licencia avanzada - CON EQUIPO_ID"""
         try:
-            # 1. Generar la licencia con seguridad avanzada
-            licencia = self.generar_licencia_avanzada(codigo, duracion_dias, id_cliente)
+            # 1. Generar la licencia con seguridad avanzada (CON EQUIPO_ID)
+            licencia = self.generar_licencia_avanzada(codigo, duracion_dias, id_cliente, "premium", equipo_id)
             if not licencia:
                 return None, None
             
@@ -254,6 +261,55 @@ class GeneradorLicencias:
     def generar_licencia_compatibilidad(self, codigo_licencia, duracion_dias=30, id_cliente="", tipo="premium"):
         """Método de compatibilidad para sistemas existentes"""
         return self.generar_licencia_avanzada(codigo_licencia, duracion_dias, id_cliente, tipo)
+    
+    def obtener_equipo_id_cliente(self):
+        """Genera script para que el cliente obtenga su equipo_id"""
+        script_windows = """
+    @echo off
+    echo Obteniendo ID del equipo para activar Caja Registradora...
+    echo.
+    wmic csproduct get uuid > %temp%\\equipo_temp.txt
+    set /p EQUIPO_ID=<%temp%\\equipo_temp.txt
+    del %temp%\\equipo_temp.txt
+    echo.
+    echo ✅ SU EQUIPO_ID ES: %EQUIPO_ID%
+    echo.
+    echo 📋 Copie este ID y envielo para generar su licencia
+    echo.
+    pause
+    """
+        
+        script_linux = """
+    #!/bin/bash
+    echo "Obteniendo ID del equipo para activar Caja Registradora..."
+    echo ""
+    if [ -f /etc/machine-id ]; then
+        EQUIPO_ID=$(cat /etc/machine-id)
+    else
+        EQUIPO_ID=$(sudo dmidecode -s system-uuid 2>/dev/null || echo "NO_UID")
+    fi
+    echo ""
+    echo "✅ SU EQUIPO_ID ES: $EQUIPO_ID"
+    echo ""
+    echo "📋 Copie este ID y envielo para generar su licencia"
+    echo ""
+    read -p "Presione Enter para continuar..."
+    """
+        
+        print("🖥️  SCRIPTS PARA OBTENER EQUIPO_ID DEL CLIENTE:")
+        print("=" * 60)
+        print("📋 El cliente debe ejecutar este script y enviarle el EQUIPO_ID:")
+        print("\n=== WINDOWS (Guardar como obtener_id.bat) ===")
+        print(script_windows)
+        print("\n=== LINUX (Guardar como obtener_id.sh) ===") 
+        print(script_linux)
+        print("\n💡 INSTRUCCIONES:")
+        print("1. Cliente ejecuta el script correspondiente a su sistema")
+        print("2. Cliente le envía el EQUIPO_ID que aparece")
+        print("3. Usted genera la licencia con ESE equipo_id específico")
+        print("4. La licencia solo funcionará en ese equipo")
+        
+        return script_windows, script_linux
 
 # FUNCIONES PRINCIPALES ACTUALIZADAS
 def generar_licencia_rapida():

@@ -53,6 +53,15 @@ class CajaGUI(QWidget):
         # Cargar y verificar configuración
         self.cargar_configuracion()
 
+        self.config = config_manager.load_config()
+
+        # DIAGNÓSTICO DE CONFIGURACIÓN
+        print("=== DIAGNÓSTICO INICIAL CONFIGURACIÓN ===")
+        print(f"📋 Configuración cargada: {self.config}")
+        print(f"📁 Logo path: {self.config.get('logo_path', 'NO EXISTE')}")
+        print(f"🏪 Nombre negocio: {self.config.get('nombre_negocio', 'NO EXISTE')}")
+        print(f"🎨 Tema: {self.config.get('tema', 'NO EXISTE')}")
+
         # INICIALIZAR GESTOR DE LICENCIAS
         self.license_manager = LicenseManager()
 
@@ -721,7 +730,7 @@ class CajaGUI(QWidget):
         QMessageBox.information(self, "Venta cancelada", "Carrito vacío.")
 
     def finalizar_venta(self):
-         # VERIFICAR LICENCIA DEMO ANTES DE VENDER
+        # VERIFICAR LICENCIA DEMO ANTES DE VENDER
         if self.license_manager.tipo_licencia == "demo":
             ventas_realizadas = self.license_manager.config_demo["ventas_realizadas"]
             if ventas_realizadas >= self.license_manager.limite_ventas_demo:
@@ -745,22 +754,38 @@ class CajaGUI(QWidget):
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("INSERT INTO ventas (total, iva, metodo_pago, usuario_id) VALUES (?, ?, ?, ?)",
-                          (total, iva, metodo_pago, self.current_user['id']))
+                        (total, iva, metodo_pago, self.current_user['id']))
             venta_id = cursor.lastrowid
             
             for item in self.carrito:
-
-                precio_formateado = formato_moneda_mx(item['precio'])
-
-                cursor.execute("SELECT id FROM productos WHERE codigo = ?", (item['codigo'],))
-                producto_id = cursor.fetchone()[0]
-                cursor.execute("INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal) VALUES (?, ?, ?, ?, ?)",
-                              (venta_id, producto_id, item['cantidad'], item['precio'], item['precio'] * item['cantidad']))
-                cursor.execute("UPDATE productos SET stock = stock - ? WHERE codigo = ?", (item['cantidad'], item['codigo']))
+                # VERIFICAR QUE EL PRODUCTO EXISTA
+                cursor.execute("SELECT id, stock FROM productos WHERE codigo = ? AND activo = 1", (item['codigo'],))
+                resultado = cursor.fetchone()
+                
+                if not resultado:
+                    QMessageBox.critical(self, "Error", f"Producto {item['codigo']} no encontrado")
+                    conn.rollback()
+                    return
+                
+                producto_id, stock_actual = resultado
+                
+                # VERIFICAR STOCK SUFICIENTE
+                if stock_actual < item['cantidad']:
+                    QMessageBox.critical(self, "Error", 
+                                    f"Stock insuficiente para {item['codigo']}\nStock actual: {stock_actual}, Solicitado: {item['cantidad']}")
+                    conn.rollback()
+                    return
+            
+                cursor.execute('''
+                    INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio_unitario, subtotal) 
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (venta_id, producto_id, item['cantidad'], item['precio'], item['precio'] * item['cantidad']))
+                
+                cursor.execute("UPDATE productos SET stock = stock - ? WHERE id = ?", 
+                            (item['cantidad'], producto_id))
             
             conn.commit()
         
-        # Generar ticket
         ticket_path = generar_ticket(self.carrito, iva, total, metodo_pago, self.config.get("nombre_negocio", ""), venta_id)
         
         self.carrito = []
@@ -771,48 +796,53 @@ class CajaGUI(QWidget):
         QMessageBox.information(self, "Venta finalizada", 
                                 f"Total: {total_formateado}\nMétodo: {metodo_pago}\nTicket: {ticket_path}")
         
-        # REGISTRAR VENTA EN EL CONTADOR DEMO (DESPUÉS DE LA VENTA EXITOSA)
+        # REGISTRAR VENTA EN EL CONTADOR DEMO
         self.license_manager.registrar_venta()
-    
-        # ACTUALIZAR BARRA DE ESTADO
         self.actualizar_barra_estado_licencia()
-
-        # Actualizar resumen de ventas de hoy en tiempo real
         self.actualizar_resumen_ventas_hoy()
-    
-        # VERIFICAR SI SE ALCANZÓ EL LÍMITE DESPUÉS DE ESTA VENTA
+        self.diagnosticar_ventas_hoy()
+        
+        # VERIFICAR LICENCIA
         if not self.license_manager.validar_licencia():
-            # Mostrar opciones en lugar de cerrar inmediatamente
             if self.mostrar_opciones_licencia_expirada():
-                # Si el usuario activó una licencia, continuar
                 print("✅ Licencia activada, continuando...")
             else:
-                # Si el usuario eligió cerrar, salir
                 QMessageBox.information(self, "Información", "La aplicación se cerrará.")
                 self.close()
                 return
 
     def actualizar_resumen_ventas_hoy(self):
-        """Actualiza el resumen de ventas del día actual - VERSIÓN CORREGIDA"""
+        """Actualiza el resumen de ventas del día actual"""
         try:
+            print("🔄 Actualizando resumen de ventas hoy...")
+            
             hoy = datetime.now().strftime("%Y-%m-%d")
+            fecha_desde = f"{hoy} 00:00:00"
+            fecha_hasta = f"{hoy} 23:59:59"
+            
             with self.db_manager.get_connection() as conn:
                 cursor = conn.cursor()
                 
-                # ✅ CONSULTA MEJORADA - Verificar que la tabla ventas existe y tiene datos
                 cursor.execute("""
                     SELECT 
                         COUNT(*) as total_ventas,
                         COALESCE(SUM(total), 0) as total_importe
                     FROM ventas 
-                    WHERE DATE(fecha) = ? AND estado = 'completada'
-                """, (hoy,))
+                    WHERE fecha BETWEEN ? AND ? AND estado = 'completada'
+                """, (fecha_desde, fecha_hasta))
                 
                 resultado = cursor.fetchone()
-                count = resultado[0] if resultado else 0
-                total = resultado[1] if resultado else 0
+                
+                if resultado:
+                    count = resultado[0]
+                    total = resultado[1]
+                else:
+                    count = 0
+                    total = 0
+                
+                print(f"📊 Ventas encontradas hoy: {count}, Total: {total}")
             
-            # ✅ ACTUALIZAR SIEMPRE - incluso si no hay ventas
+            # ACTUALIZAR SIEMPRE - incluso si no hay ventas
             if hasattr(self, 'sales_today_summary') and self.sales_today_summary:
                 if count > 0:
                     texto = f"""📊 VENTAS HOY ({hoy})
@@ -829,9 +859,53 @@ class CajaGUI(QWidget):
                     
         except Exception as e:
             print(f"❌ Error actualizando resumen de ventas: {e}")
-            # ✅ MOSTRAR MENSAJE DE ERROR EN LA INTERFAZ
+            # ✅ MOSTRAR ERROR EN LA INTERFAZ
             if hasattr(self, 'sales_today_summary') and self.sales_today_summary:
-                self.sales_today_summary.setText(f"❌ Error cargando ventas de hoy: {str(e)}")
+                self.sales_today_summary.setText(f"❌ Error cargando ventas: {str(e)}")
+
+    def diagnosticar_ventas_hoy(self):
+        """Función de diagnóstico para ventas de hoy"""
+        try:
+            hoy = datetime.now().strftime("%Y-%m-%d")
+            fecha_desde = f"{hoy} 00:00:00"
+            fecha_hasta = f"{hoy} 23:59:59"
+            
+            print(f"=== DIAGNÓSTICO VENTAS HOY ===")
+            print(f"📅 Fecha: {hoy}")
+            print(f"🔍 Rango: {fecha_desde} a {fecha_hasta}")
+            
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Verificar todas las ventas de hoy
+                cursor.execute("""
+                    SELECT id, fecha, total, estado 
+                    FROM ventas 
+                    WHERE fecha BETWEEN ? AND ?
+                    ORDER BY fecha DESC
+                """, (fecha_desde, fecha_hasta))
+                
+                ventas_hoy = cursor.fetchall()
+                print(f"📦 Ventas encontradas: {len(ventas_hoy)}")
+                
+                for venta in ventas_hoy:
+                    print(f"   Venta #{venta[0]}: {venta[1]} - {venta[2]} - {venta[3]}")
+                
+                # Verificar conteo
+                cursor.execute("""
+                    SELECT COUNT(*), SUM(total) 
+                    FROM ventas 
+                    WHERE fecha BETWEEN ? AND ? AND estado = 'completada'
+                """, (fecha_desde, fecha_hasta))
+                
+                count, total = cursor.fetchone()
+                print(f"📊 Resumen - Count: {count}, Total: {total}")
+                
+            return len(ventas_hoy)
+            
+        except Exception as e:
+            print(f"❌ Error en diagnóstico: {e}")
+            return 0
 
     def actualizar_resumen_inventario(self):
         """Actualiza el resumen de inventario en tiempo real"""

@@ -55,58 +55,66 @@ class ConfigManager:
             return self.create_default_config()
 
     def ensure_default_values(self, config):
-        """Asegurar que la configuración tenga todos los valores requeridos"""
-        default_config = self.create_default_config()
-
-        if 'tema' not in config:
-            config['tema'] = 'claro'
-            logger.info("✅ Tema agregado por defecto: claro")
-
-        for key, value in default_config.items():
-            if key not in config:
-                config[key] = value
-                logger.warning(f"⚠️ Valor por defecto agregado: {key} = {value}")
-
-        return config
+        """Asegurar que la configuración tenga todos los valores requeridos - SIN RECURSIÓN"""
+        
+        # ✅ VALORES POR DEFECTO DIRECTOS (sin llamar a create_default_config)
+        valores_por_defecto = {
+            'nombre_negocio': 'Mi Negocio',
+            'color_primario': '#3498db', 
+            'color_secundario': '#2ecc71',
+            'logo_path': 'logo.png',
+            'moneda': 'MXN',
+            'impuestos': 16.0,
+            'direccion': '',
+            'telefono': '', 
+            'rfc': '',
+            'tema': 'claro'
+        }
+        
+        config_actualizada = config.copy()
+        
+        for key, default_value in valores_por_defecto.items():
+            if key not in config_actualizada or config_actualizada[key] is None or config_actualizada[key] == '':
+                config_actualizada[key] = default_value
+                print(f"⚠️ Valor por defecto agregado: {key} = {default_value}")
+        
+        return config_actualizada
 
     def update_config(self, new_config):
-        """Actualizar configuración con validación y backup"""
+        """Actualizar configuración - VERSIÓN SIMPLIFICADA Y SEGURA"""
         try:
-            # Validar configuración básica
-            required_keys = ['nombre_negocio', 'color_primario', 'color_secundario']
-            for key in required_keys:
-                if key not in new_config:
-                    raise ValueError(f"Falta clave requerida: {key}")
+            print(f"💾 Guardando configuración...")
             
-            # CREAR BACKUP antes de guardar
+            # 1. CARGAR CONFIGURACIÓN ACTUAL (sin procesar)
+            config_actual = {}
             if os.path.exists(self.config_path):
-                backup_path = self.config_path + ".bak"
-                shutil.copy2(self.config_path, backup_path)
-                logger.info(f"📦 Backup creado: {backup_path}")
+                with open(self.config_path, 'r', encoding='utf-8') as f:
+                    config_actual = json.load(f)
             
+            # 2. COMBINAR CONFIGURACIONES
+            config_actualizada = {**config_actual, **new_config}
+            
+            # 3. APLICAR VALORES POR DEFECTO SOLO SI FALTAN
+            config_final = self.ensure_default_values(config_actualizada)
+            
+            # 4. GUARDAR DIRECTAMENTE
             with open(self.config_path, 'w', encoding='utf-8') as f:
-                json.dump(new_config, f, indent=4, ensure_ascii=False)
+                json.dump(config_final, f, indent=4, ensure_ascii=False)
             
-            if os.path.exists(self.config_path):
-                logger.info("✅ Configuración actualizada exitosamente")
-                return True
-            else:
-                logger.error("❌ El archivo de configuración no se creó")
-                return False
+            print("✅ Configuración guardada exitosamente")
+            print(f"📋 Configuración final: {config_final}")
+            return True
                 
-        except PermissionError:
-            logger.error("❌ Error de permisos. En Windows, ejecutar como administrador")
-            return False
         except Exception as e:
-            logger.error(f"❌ Error actualizando configuración: {e}")
+            print(f"❌ ERROR guardando configuración: {str(e)}")
             return False
 
     def create_default_config(self):
-        """Crear configuración por defecto"""
+        """Crear configuración por defecto - SIN LLAMAR A update_config"""
         default_config = {
             "nombre_negocio": "Mi Negocio",
             "color_primario": "#3498db",
-            "color_secundario": "#2ecc71",
+            "color_secundario": "#2ecc71", 
             "logo_path": "logo.png",
             "moneda": "MXN",
             "impuestos": 16.0,
@@ -115,8 +123,19 @@ class ConfigManager:
             "rfc": "",
             "tema": "claro"
         }
-        success = self.update_config(default_config)
-        return default_config if success else None
+        
+        # GUARDAR DIRECTAMENTE SIN LLAMAR A update_config
+        try:
+            print("🔄 Creando configuración por defecto...")
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                json.dump(default_config, f, indent=4, ensure_ascii=False)
+            
+            print("✅ Configuración por defecto creada exitosamente")
+            return default_config
+            
+        except Exception as e:
+            print(f"❌ Error creando configuración por defecto: {e}")
+            return default_config  # Retornar igual aunque falle el guardado
 
 # Instancia global para importar
 config_manager = ConfigManager()

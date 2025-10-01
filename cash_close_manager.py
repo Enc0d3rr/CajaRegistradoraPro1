@@ -9,6 +9,7 @@ from PyQt6.QtCore import Qt, QDate
 from datetime import datetime, timedelta
 from export_dialog import ExportDialog
 from utils.helpers import formato_moneda_mx 
+import sys
 
 class CashCloseManagerDialog(QDialog):
     def __init__(self, db_manager, current_user, parent=None):
@@ -224,13 +225,12 @@ class CashCloseManagerDialog(QDialog):
         self.calcular_totales_cierre(fecha_desde, fecha_hasta)
 
     def exportar_reporte(self):
-        """Abre diálogo de exportación para cierres - VERSIÓN CORREGIDA"""
         date_range = {
             'desde': self.date_from.date().toString("yyyy-MM-dd"),
             'hasta': self.date_to.date().toString("yyyy-MM-dd")
         }
-
-        # ✅ CORRECCIÓN: Pasar db_manager como primer parámetro
+        
+         # SOLO PDF 
         dialog = ExportDialog(self.db_manager, 'cierres', date_range, self)
         dialog.exec()
     
@@ -344,7 +344,7 @@ class CashCloseManagerDialog(QDialog):
                 self.total_ventas.setText(formato_moneda_mx(total_ventas))
                 self.efectivo_esperado.setText(formato_moneda_mx(efectivo_esperado))
                 
-                # ✅ ACTUALIZAR EL RESUMEN DE VENTAS (lo que ves vacío)
+                # ACTUALIZAR EL RESUMEN DE VENTAS (lo que ves vacío)
                 if hasattr(self, 'sales_summary') and self.sales_summary:
                     fecha_hasta_corta = fecha_hasta.split()[0] 
                     
@@ -419,10 +419,9 @@ class CashCloseManagerDialog(QDialog):
             # Calcular efectivo esperado
             efectivo_esperado = efectivo_inicial + ventas_efectivo
             
-            # ✅ CORRECCIÓN: Actualizar AMBOS campos
+            # CORRECCIÓN: Actualizar AMBOS campos
             self.efectivo_esperado.setText(formato_moneda_mx(efectivo_esperado))
-            self.efectivo_caja.setText(formato_moneda_mx(efectivo_esperado))  # ← ESTA LÍNEA FALTABA
-            
+            self.efectivo_caja.setText(formato_moneda_mx(efectivo_esperado)) 
             # Pedir al usuario el efectivo físico contado
             efectivo_fisico, ok = QInputDialog.getDouble(
                 self, 
@@ -539,7 +538,7 @@ class CashCloseManagerDialog(QDialog):
             with self.db_manager.get_connection() as conn:
                 cursor = conn.cursor()
                 
-                # ✅ CONSULTA SIMPLIFICADA Y CORREGIDA
+                # CONSULTA SIMPLIFICADA Y CORREGIDA
                 cursor.execute("""
                     SELECT 
                         COALESCE(c.fecha_cierre, c.fecha_apertura) as fecha,

@@ -186,7 +186,7 @@ class SalesHistoryDialog(QDialog):
         chart2_group = QGroupBox("Métodos de Pago")
         chart2_group_layout = QVBoxLayout()
         
-        # ✅ CONFIGURACIÓN MEJORADA
+        # CONFIGURACIÓN MEJORADA
         self.figure2 = Figure(figsize=(5, 4), dpi=100)
         self.canvas2 = FigureCanvas(self.figure2)
         self.canvas2.setMinimumSize(450, 350)
@@ -198,7 +198,7 @@ class SalesHistoryDialog(QDialog):
         
         charts_layout.addWidget(chart2_container)
         
-        # ✅ AÑADIR ESTRECHAJE PARA MEJOR DISTRIBUCIÓN
+        # AÑADIR ESTRECHAJE PARA MEJOR DISTRIBUCIÓN
         charts_layout.setStretch(0, 1)
         charts_layout.setStretch(1, 1)
         
@@ -404,7 +404,7 @@ class SalesHistoryDialog(QDialog):
                         style='italic', color='gray')
                 ax2.set_title('Métodos de Pago', fontsize=12, fontweight='bold')
             
-            # ✅ ACTUALIZAR CANVAS 2
+            # ACTUALIZAR CANVAS 2
             self.canvas2.draw()
             
             print("✅ Gráficas generadas exitosamente")
@@ -507,12 +507,11 @@ class SalesHistoryDialog(QDialog):
     
     # Exportar reporte
     def exportar_reporte(self):
-        """Abre el diálogo de exportación para ventas - VERSIÓN CORREGIDA"""
         date_range = {
             'desde': self.date_from.date().toString("yyyy-MM-dd"),
             'hasta': self.date_to.date().toString("yyyy-MM-dd")
         }
         
-        # Pasar db_manager como primer parámetro
+        # SOLO PDF
         dialog = ExportDialog(self.db_manager, 'ventas', date_range, self)
         dialog.exec()
