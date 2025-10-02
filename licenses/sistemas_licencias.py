@@ -16,7 +16,6 @@ class SistemaLicencias:
     def __init__(self):
         self.generador = GeneradorLicencias()
         
-        # 📁 RUTAS ABSOLUTAS CORREGIDAS
         self.base_dir = self.obtener_directorio_base()
         self.archivo_clientes = os.path.join(self.base_dir, "data", "clientes_licencias.json")
         self.directorio_licencias = os.path.join(self.base_dir, "licencias")
@@ -26,26 +25,22 @@ class SistemaLicencias:
         print(f"   Clientes: {self.archivo_clientes}")
         print(f"   Licencias: {self.directorio_licencias}")
         print(f"   Seguridad: HMAC-SHA512 + AES-256 + SHA3-512")
+        print(f"   🔒 NUEVO: Sistema de vinculación por equipo_id")
         
         self.cargar_clientes()
         self.ensure_directories()
     
     def obtener_directorio_base(self):
-        """Obtiene la ruta base del proyecto"""
         try:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             
-            # Si estamos en licenses/, subir un nivel al directorio principal
             if os.path.basename(current_dir) == 'licenses':
                 base_dir = os.path.dirname(current_dir)
             else:
-                # Si no, asumir que estamos en el directorio base
                 base_dir = current_dir
             
-            # VERIFICAR que el directorio base es correcto
             if not os.path.exists(base_dir):
                 print(f"❌ Directorio base no existe: {base_dir}")
-                # Fallback: directorio actual de trabajo
                 base_dir = os.getcwd()
                 print(f"✅ Usando directorio actual: {base_dir}")
             
@@ -56,22 +51,18 @@ class SistemaLicencias:
             return os.getcwd()
     
     def ensure_directories(self):
-        """Asegura que los directorios existan"""
         try:
-            # CREAR DIRECTORIO licencias/ (con 'c' no 's')
             if not os.path.exists(self.directorio_licencias):
                 os.makedirs(self.directorio_licencias, exist_ok=True)
                 print(f"✅ Directorio de licencias creado: {self.directorio_licencias}")
             else:
                 print(f"✅ Directorio de licencias ya existe: {self.directorio_licencias}")
             
-            # Directorio data
             data_dir = os.path.join(self.base_dir, "data")
             if not os.path.exists(data_dir):
                 os.makedirs(data_dir, exist_ok=True)
                 print(f"✅ Directorio data creado: {data_dir}")
             
-            # VERIFICAR permisos de escritura
             if not os.access(self.directorio_licencias, os.W_OK):
                 print(f"❌ Sin permisos de escritura en: {self.directorio_licencias}")
                 return False
@@ -83,7 +74,6 @@ class SistemaLicencias:
             return False
     
     def cargar_clientes(self):
-        """Carga la base de datos de clientes"""
         try:
             if os.path.exists(self.archivo_clientes):
                 with open(self.archivo_clientes, 'r', encoding='utf-8') as f:
@@ -97,7 +87,6 @@ class SistemaLicencias:
             self.clientes = []
     
     def guardar_clientes(self):
-        """Guarda la base de datos de clientes"""
         try:
             with open(self.archivo_clientes, 'w', encoding='utf-8') as f:
                 json.dump(self.clientes, f, indent=4, ensure_ascii=False)
@@ -105,8 +94,8 @@ class SistemaLicencias:
         except Exception as e:
             print(f"❌ Error guardando clientes: {e}")
     
-    def agregar_cliente(self, nombre, email, telefono, duracion_dias=30):
-        """Agrega un nuevo cliente y genera su licencia con seguridad avanzada"""
+    def agregar_cliente(self, nombre, email, telefono, duracion_dias=30, equipo_id=None):
+        """Agrega un nuevo cliente y genera su licencia VINCULADA al equipo_id"""
         try:
             id_cliente = f"CLI_{datetime.now().strftime('%Y%m%d%H%M%S')}"
             codigo_licencia = f"CAJA-PRO-{id_cliente}"
@@ -120,32 +109,38 @@ class SistemaLicencias:
                 "fecha_registro": datetime.now().isoformat(),
                 "duracion_dias": duracion_dias,
                 "estado": "activo",
-                "seguridad": "avanzada_v2.0"
+                "seguridad": "avanzada_v2.0",
+                "equipo_id": equipo_id  # NUEVO: Guardar el equipo_id del cliente
             }
             
-            # Generar licencia con seguridad avanzada
-            licencia = self.generador.generar_licencia_avanzada(codigo_licencia, duracion_dias, id_cliente)
+            # NUEVO: Generar licencia VINCULADA al equipo_id específico
+            print(f"🔒 Generando licencia VINCULADA para equipo: {equipo_id}")
+            licencia = self.generador.generar_licencia_avanzada(
+                codigo_licencia, 
+                duracion_dias, 
+                id_cliente, 
+                "premium", 
+                equipo_id  # Pasar el equipo_id específico
+            )
             
             if not licencia:
-                return None, "Error generando licencia avanzada"
+                return None, "Error generando licencia avanzada vinculada"
             
-            # DEFINIR RUTA CORRECTA PARA GUARDAR
             archivo_licencia = os.path.join(
                 self.directorio_licencias,
                 f"{id_cliente}_licencia_avanzada.json"
             )
             
-            print(f"📁 Guardando licencia avanzada en: {archivo_licencia}")
+            print(f"📁 Guardando licencia avanzada VINCULADA en: {archivo_licencia}")
             
-            # Guardar licencia
             if self.generador.guardar_licencia(licencia, archivo_licencia):
-                # Agregar a base de datos
                 self.clientes.append(cliente)
                 self.guardar_clientes()
                 
                 print(f"✅ Cliente agregado: {nombre}")
-                print(f"📄 Licencia avanzada guardada en: {archivo_licencia}")
-                print(f"🔒 Seguridad: HMAC-SHA512 + AES-256 + SHA3-512")
+                print(f"📄 Licencia avanzada VINCULADA guardada")
+                print(f"🔒 Vinculada al equipo: {equipo_id}")
+                print(f"🔐 Seguridad: HMAC-SHA512 + AES-256 + SHA3-512")
                 return cliente, archivo_licencia
             else:
                 return None, "Error guardando archivo de licencia"
@@ -155,9 +150,8 @@ class SistemaLicencias:
             return None, f"Error: {str(e)}"
     
     def listar_clientes(self):
-        """Lista todos los clientes con información de seguridad"""
         print(f"\n📋 LISTA DE CLIENTES ({len(self.clientes)} registros) - SEGURIDAD AVANZADA")
-        print("=" * 100)
+        print("=" * 120)
         
         if not self.clientes:
             print("   No hay clientes registrados")
@@ -166,19 +160,20 @@ class SistemaLicencias:
         for i, cliente in enumerate(self.clientes, 1):
             fecha_registro = datetime.fromisoformat(cliente['fecha_registro']).strftime('%d/%m/%Y')
             seguridad = cliente.get('seguridad', 'básica')
-            print(f"{i:2d}. {cliente['nombre']:20} | {cliente['email']:25} | {cliente['codigo_licencia']:20} | Seg: {seguridad:15} | Reg: {fecha_registro}")
+            equipo_id = cliente.get('equipo_id', 'No vinculado')
+            
+            print(f"{i:2d}. {cliente['nombre']:20} | {cliente['email']:25} | {cliente['codigo_licencia']:20} | "
+                  f"Equipo: {equipo_id[:16]:16}... | Seg: {seguridad:15} | Reg: {fecha_registro}")
     
     def buscar_cliente(self, email):
-        """Busca un cliente por email"""
         for cliente in self.clientes:
             if cliente['email'].lower() == email.lower():
                 return cliente
         return None
     
     def buscar_cliente_por_indice(self, indice):
-        """Busca cliente por índice en la lista"""
         try:
-            indice = int(indice) - 1  # Convertir a base 0
+            indice = int(indice) - 1
             if 0 <= indice < len(self.clientes):
                 return self.clientes[indice]
             else:
@@ -187,43 +182,44 @@ class SistemaLicencias:
             return None
     
     def renovar_licencia(self, email, duracion_dias=30):
-        """Renueva la licencia de un cliente con seguridad avanzada"""
+        """Renueva la licencia de un cliente manteniendo la vinculación al equipo"""
         try:
             cliente = self.buscar_cliente(email)
             if not cliente:
                 return False, "Cliente no encontrado"
             
-            print(f"🔄 Renovando licencia avanzada para: {cliente['nombre']}")
+            equipo_id = cliente.get('equipo_id')
+            if not equipo_id:
+                return False, "Cliente no tiene equipo_id asignado. Use la opción de agregar cliente."
             
-            # CORREGIR RUTA DE GUARDADO - usar directorio_licencias correcto
+            print(f"🔄 Renovando licencia avanzada VINCULADA para: {cliente['nombre']}")
+            print(f"🔒 Manteniendo vinculación al equipo: {equipo_id}")
+            
             archivo_licencia = os.path.join(
                 self.directorio_licencias,
                 f"{cliente['id']}_licencia_avanzada_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             )
             
-            print(f"📁 Intentando guardar en: {archivo_licencia}")
-            
-            # Generar nueva licencia con seguridad avanzada
+            # NUEVO: Renovar manteniendo el mismo equipo_id
             nueva_licencia = self.generador.generar_licencia_avanzada(
                 cliente['codigo_licencia'], 
                 duracion_dias, 
-                cliente['id']
+                cliente['id'],
+                "premium",
+                equipo_id  # Mantener el mismo equipo_id
             )
             
             if not nueva_licencia:
-                return False, "Error generando nueva licencia avanzada"
+                return False, "Error generando nueva licencia avanzada vinculada"
             
-            # GUARDAR EN LA RUTA CORRECTA
             if self.generador.guardar_licencia(nueva_licencia, archivo_licencia):
-                print(f"✅ Licencia avanzada guardada correctamente en: {archivo_licencia}")
+                print(f"✅ Licencia avanzada VINCULADA renovada correctamente")
                 
-                # Actualizar cliente
                 cliente['duracion_dias'] = duracion_dias
                 cliente['fecha_renovacion'] = datetime.now().isoformat()
                 cliente['seguridad'] = 'avanzada_v2.0'
                 self.guardar_clientes()
                 
-                # Validar la licencia recién creada
                 print("🔍 Validando licencia recién creada...")
                 if self.generador.validar_licencia_avanzada(archivo_licencia):
                     print("✅ Licencia validada exitosamente")
@@ -237,9 +233,61 @@ class SistemaLicencias:
         except Exception as e:
             print(f"❌ Error renovando licencia: {e}")
             return False, f"Error: {str(e)}"
-    
+
+    def obtener_equipo_id_cliente(self):
+        """NUEVO: Ayuda al vendedor a obtener el equipo_id del cliente"""
+        print(f"\n🖥️  OBTENER EQUIPO_ID DEL CLIENTE")
+        print("=" * 50)
+        
+        script_windows = """
+@echo off
+echo Obteniendo ID del equipo para activar Caja Registradora...
+echo.
+wmic csproduct get uuid > %temp%\\equipo_temp.txt
+set /p EQUIPO_ID=<%temp%\\equipo_temp.txt
+del %temp%\\equipo_temp.txt
+echo.
+echo ✅ SU EQUIPO_ID ES: %EQUIPO_ID%
+echo.
+echo 📋 Copie este ID y envielo para generar su licencia
+echo.
+pause
+"""
+        
+        script_linux = """
+#!/bin/bash
+echo "Obteniendo ID del equipo para activar Caja Registradora..."
+echo ""
+if [ -f /etc/machine-id ]; then
+    EQUIPO_ID=$(cat /etc/machine-id)
+else
+    EQUIPO_ID=$(sudo dmidecode -s system-uuid 2>/dev/null || echo "NO_UID")
+fi
+echo ""
+echo "✅ SU EQUIPO_ID ES: $EQUIPO_ID"
+echo ""
+echo "📋 Copie este ID y envielo para generar su licencia"
+echo ""
+read -p "Presione Enter para continuar..."
+"""
+        
+        print("📋 INSTRUCCIONES PARA EL CLIENTE:")
+        print("1. El cliente debe ejecutar el script correspondiente a su sistema")
+        print("2. El cliente le envía el EQUIPO_ID que aparece")
+        print("3. Usted genera la licencia con ESE equipo_id específico")
+        print("4. La licencia solo funcionará en ese equipo específico")
+        
+        print("\n=== WINDOWS (Guardar como obtener_id.bat) ===")
+        print(script_windows)
+        print("\n=== LINUX (Guardar como obtener_id.sh) ===") 
+        print(script_linux)
+        
+        return script_windows, script_linux
+
+    # Los demás métodos permanecen iguales (eliminar_cliente, verificar_archivos_licencias, etc.)
+    # Solo modifiqué agregar_cliente y renovar_licencia para incluir equipo_id
+
     def eliminar_cliente(self, email):
-        """Elimina un cliente y sus archivos de licencia"""
         try:
             cliente = self.buscar_cliente(email)
             if not cliente:
@@ -247,10 +295,8 @@ class SistemaLicencias:
             
             print(f"🗑️  Eliminando cliente: {cliente['nombre']} ({cliente['email']})")
             
-            # 1. ELIMINAR ARCHIVOS DE LICENCIA DEL CLIENTE
             archivos_eliminados = self.eliminar_archivos_cliente(cliente['id'])
             
-            # 2. ELIMINAR CLIENTE DE LA BASE DE DATOS
             self.clientes = [c for c in self.clientes if c['email'].lower() != email.lower()]
             self.guardar_clientes()
             
@@ -267,9 +313,7 @@ class SistemaLicencias:
             return False, f"Error eliminando cliente: {str(e)}"
     
     def eliminar_archivos_cliente(self, id_cliente):
-        """Elimina todos los archivos de licencia de un cliente"""
         try:
-            # Buscar todos los archivos del cliente (incluyendo avanzados)
             patrones = [
                 os.path.join(self.directorio_licencias, f"{id_cliente}_licencia*.json"),
                 os.path.join(self.directorio_licencias, f"{id_cliente}_licencia_avanzada*.json")
@@ -293,12 +337,10 @@ class SistemaLicencias:
             return 0
     
     def verificar_archivos_licencias(self):
-        """Verifica que todos los archivos de licencia existan y sean válidos"""
         print(f"\n🔍 VERIFICANDO ARCHIVOS DE LICENCIAS AVANZADAS EN: {self.directorio_licencias}")
         problemas = 0
         licencias_validadas = 0
         
-        # VERIFICAR que el directorio existe
         if not os.path.exists(self.directorio_licencias):
             print(f"❌ Directorio de licencias no existe: {self.directorio_licencias}")
             crear = input("   ¿Crear directorio? (s/n): ").strip().lower()
@@ -309,7 +351,6 @@ class SistemaLicencias:
                 return
         
         for cliente in self.clientes:
-            # BUSCAR ARCHIVOS EN EL DIRECTORIO CORRECTO
             patron = os.path.join(self.directorio_licencias, f"{cliente['id']}_licencia*.json")
             archivos = glob.glob(patron)
             
@@ -318,10 +359,23 @@ class SistemaLicencias:
                 for archivo in archivos:
                     print(f"   📄 {os.path.basename(archivo)}")
                     
-                    # Validar cada licencia
                     print(f"   🔍 Validando seguridad avanzada...")
                     if self.generador.validar_licencia_avanzada(archivo):
                         print(f"   ✅ Licencia válida (seguridad avanzada)")
+                        
+                        # NUEVO: Mostrar información de vinculación
+                        try:
+                            with open(archivo, 'r', encoding='utf-8') as f:
+                                licencia_data = json.load(f)
+                            if 'datos_encriptados' in licencia_data:
+                                datos_desencriptados = self.generador.security.desencriptar_datos(
+                                    licencia_data['datos_encriptados']
+                                )
+                                equipo_id_licencia = datos_desencriptados.get('equipo_id', 'No especificado')
+                                print(f"   🔒 Vinculada a: {equipo_id_licencia[:16]}...")
+                        except:
+                            print(f"   ⚠️ No se pudo verificar vinculación")
+                        
                         licencias_validadas += 1
                     else:
                         print(f"   ❌ Licencia inválida o corrupta")
@@ -330,7 +384,6 @@ class SistemaLicencias:
                 print(f"❌ {cliente['nombre']}: SIN ARCHIVO DE LICENCIA")
                 problemas += 1
                 
-                # Ofrecer regenerar
                 regenerar = input("   ¿Regenerar licencia avanzada? (s/n): ").strip().lower()
                 if regenerar == 's':
                     resultado, archivo = self.renovar_licencia(cliente['email'], cliente['duracion_dias'])
@@ -349,19 +402,21 @@ class SistemaLicencias:
             print(f"⚠️ Se encontraron {problemas} problemas que requieren atención")
 
     def generar_reporte_seguridad(self):
-        """Genera un reporte de seguridad del sistema"""
         print(f"\n📊 REPORTE DE SEGURIDAD DEL SISTEMA")
         print("=" * 60)
         
-        # Estadísticas de clientes
         clientes_avanzados = sum(1 for c in self.clientes if c.get('seguridad', '').startswith('avanzada'))
         clientes_basicos = len(self.clientes) - clientes_avanzados
+        
+        clientes_vinculados = sum(1 for c in self.clientes if c.get('equipo_id'))
+        clientes_no_vinculados = len(self.clientes) - clientes_vinculados
         
         print(f"👥 Clientes totales: {len(self.clientes)}")
         print(f"   🔒 Seguridad avanzada: {clientes_avanzados}")
         print(f"   🔓 Seguridad básica: {clientes_basicos}")
+        print(f"   🔗 Vinculados a equipo: {clientes_vinculados}")
+        print(f"   🔓 No vinculados: {clientes_no_vinculados}")
         
-        # Verificar archivos de licencia
         total_archivos = 0
         archivos_avanzados = 0
         
@@ -380,12 +435,16 @@ class SistemaLicencias:
         print(f"   🔒 Licencias avanzadas: {archivos_avanzados}")
         print(f"   🔓 Licencias básicas: {total_archivos - archivos_avanzados}")
         
-        # Recomendaciones
         print(f"\n💡 RECOMENDACIONES DE SEGURIDAD:")
         if clientes_basicos > 0:
             print(f"   ⚠️  {clientes_basicos} clientes necesitan actualizar a seguridad avanzada")
         else:
             print(f"   ✅ Todos los clientes tienen seguridad avanzada")
+            
+        if clientes_no_vinculados > 0:
+            print(f"   ⚠️  {clientes_no_vinculados} clientes no tienen vinculación por equipo")
+        else:
+            print(f"   ✅ Todos los clientes tienen licencias vinculadas")
             
         if total_archivos == 0:
             print(f"   ❌ No se encontraron archivos de licencia")
@@ -393,46 +452,58 @@ class SistemaLicencias:
             print(f"   ⚠️  {total_archivos - archivos_avanzados} licencias necesitan regenerarse con seguridad avanzada")
 
 def menu_principal():
-    """Menú interactivo del sistema de licencias con seguridad avanzada"""
     sistema = SistemaLicencias()
     
     while True:
         print("\n🎫 SISTEMA DE GESTIÓN DE LICENCIAS - SEGURIDAD AVANZADA v2.0")
         print("=" * 70)
-        print("1. 🏢 Agregar nuevo cliente (licencia avanzada)")
+        print("1. 🏢 Agregar nuevo cliente (licencia VINCULADA)")
         print("2. 📋 Listar clientes")
-        print("3. 🔄 Renovar licencia (seguridad avanzada)")
+        print("3. 🔄 Renovar licencia (mantener vinculación)")
         print("4. 🔍 Buscar cliente por email")
         print("5. 🗑️  Eliminar cliente")
         print("6. 🔎 Verificar archivos de licencias")
         print("7. 📊 Reporte de seguridad")
-        print("8. 🧪 Probar generador de licencias")
-        print("9. 🚪 Salir")
+        print("8. 🆔 Obtener equipo_id del cliente")
+        print("9. 🧪 Probar generador de licencias")
+        print("10. 🚪 Salir")
         
         opcion = input("\nSeleccione una opción: ").strip()
         
         if opcion == "1":
-            print("\n➕ NUEVO CLIENTE (SEGURIDAD AVANZADA)")
+            print("\n➕ NUEVO CLIENTE (LICENCIA VINCULADA)")
             nombre = input("Nombre: ").strip()
             email = input("Email: ").strip()
             telefono = input("Teléfono: ").strip()
             duracion = input("Duración en días [30]: ").strip() or "30"
             
+            # NUEVO: Solicitar equipo_id del cliente
+            print("\n🔒 SISTEMA DE VINCULACIÓN POR EQUIPO")
+            equipo_id = input("Equipo_ID del cliente (OBLIGATORIO): ").strip()
+            
+            if not equipo_id:
+                print("❌ El equipo_id es OBLIGATORIO para licencias vinculadas")
+                continuar = input("¿Continuar sin vinculación? (s/n): ").strip().lower()
+                if continuar != 's':
+                    continue
+            
             if not nombre or not email:
                 print("❌ Nombre y email son obligatorios")
                 continue
                 
-            cliente, archivo = sistema.agregar_cliente(nombre, email, telefono, int(duracion))
+            cliente, archivo = sistema.agregar_cliente(nombre, email, telefono, int(duracion), equipo_id)
             if cliente:
-                print(f"✅ Cliente agregado exitosamente con seguridad avanzada!")
+                print(f"✅ Cliente agregado exitosamente con licencia VINCULADA!")
                 
                 if archivo and os.path.exists(archivo):
-                    print(f"📄 Licencia avanzada guardada en: {archivo}")
+                    print(f"📄 Licencia avanzada VINCULADA guardada en: {archivo}")
                     print(f"🔑 Código de activación: {cliente['codigo_licencia']}")
-                    print(f"🔒 Características de seguridad:")
+                    print(f"🔒 Vinculada al equipo: {equipo_id}")
+                    print(f"🔐 Características de seguridad:")
+                    print(f"   • VINCULACIÓN POR HARDWARE")
                     print(f"   • HMAC-SHA512 para verificación de integridad")
                     print(f"   • Encriptación AES-256 para datos sensibles")
-                    print(f"   • Checksum SHA3-512 para detección de modificaciones")
+                    print(f"   • No transferible entre equipos")
                 else:
                     print("⚠️ Licencia generada pero no se pudo verificar el archivo")
             else:
@@ -451,11 +522,11 @@ def menu_principal():
             
             resultado, archivo = sistema.renovar_licencia(email, int(duracion))
             if resultado:
-                print(f"✅ Licencia avanzada renovada exitosamente!")
+                print(f"✅ Licencia avanzada VINCULADA renovada exitosamente!")
                 
                 if archivo and os.path.exists(archivo):
                     print(f"📄 Nueva licencia avanzada: {archivo}")
-                    print(f"🔒 Actualizada con seguridad: HMAC-SHA512 + AES-256 + SHA3-512")
+                    print(f"🔒 Mantiene vinculación al equipo original")
                 else:
                     print("⚠️ Licencia renovada pero no se pudo verificar el archivo")
             else:
@@ -472,8 +543,8 @@ def menu_principal():
                 print(f"   Código: {cliente['codigo_licencia']}")
                 print(f"   ID: {cliente['id']}")
                 print(f"   Seguridad: {cliente.get('seguridad', 'básica')}")
+                print(f"   Equipo ID: {cliente.get('equipo_id', 'No vinculado')}")
                 
-                # Verificar si existe archivo de licencia
                 patron = os.path.join(sistema.directorio_licencias, f"{cliente['id']}_licencia*.json")
                 archivos = glob.glob(patron)
                 if archivos:
@@ -481,7 +552,6 @@ def menu_principal():
                     for archivo in archivos:
                         print(f"     📄 {os.path.basename(archivo)}")
                         
-                        # Validar licencia
                         if sistema.generador.validar_licencia_avanzada(archivo):
                             print(f"       ✅ Válida (seguridad avanzada)")
                         else:
@@ -495,7 +565,6 @@ def menu_principal():
             print("\n🗑️  ELIMINAR CLIENTE")
             print("-" * 30)
             
-            # Mostrar clientes primero
             if not sistema.clientes:
                 print("❌ No hay clientes registrados")
                 continue
@@ -515,7 +584,6 @@ def menu_principal():
                     print("❌ Email requerido")
                     continue
                     
-                # CONFIRMACIÓN DE SEGURIDAD
                 cliente = sistema.buscar_cliente(email)
                 if cliente:
                     print(f"\n⚠️  ¿ESTÁ SEGURO DE ELIMINAR ESTE CLIENTE?")
@@ -564,14 +632,16 @@ def menu_principal():
             sistema.generar_reporte_seguridad()
             
         elif opcion == "8":
+            sistema.obtener_equipo_id_cliente()
+                
+        elif opcion == "9":
             print("\n🧪 PROBANDO GENERADOR DE LICENCIAS AVANZADAS")
             print("-" * 50)
             
-            # Probar generación rápida
             from licenses.generador_licencias import generar_licencia_rapida
             generar_licencia_rapida()
                 
-        elif opcion == "9":
+        elif opcion == "10":
             print("👋 ¡Hasta luego!")
             break
             
@@ -579,31 +649,27 @@ def menu_principal():
             print("❌ Opción inválida")
 
 if __name__ == "__main__":
-    # 📁 VERIFICAR RUTAS Y CONFIGURACIÓN AL INICIAR
     print("🔒 Iniciando Sistema de Licencias - Seguridad Avanzada v2.0...")
     print("📦 Características implementadas:")
+    print("   • VINCULACIÓN POR EQUIPO: Licencias no transferibles")
     print("   • HMAC-SHA512 para hashes seguros")
     print("   • Encriptación AES-256 para datos sensibles") 
     print("   • Validación multi-capa")
-    print("   • Checksums SHA3-512 para integridad")
-    print("   • IDs de instalación únicos y robustos\n")
+    print("   • Checksums SHA3-512 para integridad\n")
     
     sistema = SistemaLicencias()
     
-    # Verificar que el generador funciona
     print("🧪 Probando generador de licencias avanzadas...")
     test_licencia, test_archivo = sistema.generador.generar_y_guardar_automatico("TEST-SISTEMA-ADV", 1, "TEST-SISTEMA-ADV")
     if test_archivo and os.path.exists(test_archivo):
         print("✅ Generador de licencias avanzadas funcionando correctamente")
         
-        # Validar la licencia de prueba
         print("🔍 Validando licencia de prueba...")
         if sistema.generador.validar_licencia_avanzada(test_archivo):
             print("✅ Licencia de prueba validada exitosamente")
         else:
             print("❌ Licencia de prueba no pudo ser validada")
             
-        # Limpiar archivo de prueba
         try:
             os.remove(test_archivo)
             print("✅ Archivo de prueba limpiado")

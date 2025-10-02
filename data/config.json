@@ -2,11 +2,12 @@
     "nombre_negocio": "Don Beto Shop",
     "color_primario": "#3498db",
     "color_secundario": "#2ecc71",
-    "logo_path": "icono_4.png",
+    "logo_path": "icono_1.png",
     "moneda": "MXN",
     "impuestos": 16.0,
     "direccion": "",
     "telefono": "",
     "rfc": "",
-    "tema": "oscuro"
+    "tema": "oscuro",
+    "iva": 0.16
 }

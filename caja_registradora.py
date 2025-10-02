@@ -1,7 +1,9 @@
-import sys
 import os
+import sys
+import json
 import atexit
 from datetime import datetime
+
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
     QListWidget, QHBoxLayout, QMessageBox, QInputDialog,
@@ -50,6 +52,24 @@ class CajaGUI(QWidget):
     def __init__(self):
         super().__init__()
 
+        # INICIALIZAR CONFIGURACIÓN PRIMERO
+        self.inicializar_configuracion_por_defecto()
+        
+        # Cargar y verificar configuración
+        self.cargar_configuracion()
+
+        self.config = config_manager.load_config()
+
+        # DIAGNÓSTICO DE CONFIGURACIÓN
+        print("=== DIAGNÓSTICO INICIAL CONFIGURACIÓN ===")
+        print(f"📋 Configuración cargada: {self.config}")
+        print(f"📁 Logo path: {self.config.get('logo_path', 'NO EXISTE')}")
+        print(f"🏪 Nombre negocio: {self.config.get('nombre_negocio', 'NO EXISTE')}")
+        print(f"🎨 Tema: {self.config.get('tema', 'NO EXISTE')}")
+
+        # INICIALIZAR GESTOR DE LICENCIAS
+        self.license_manager = LicenseManager()
+
         # Cargar y verificar configuración
         self.cargar_configuracion()
 
@@ -92,18 +112,89 @@ class CajaGUI(QWidget):
         self.init_ui()
         self.aplicar_tema()
 
+    def inicializar_configuracion_por_defecto(self):
+        """Crea configuración por defecto si no existe"""
+        try:
+            # Crear directorio data si no existe
+            data_dir = "data"
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir, exist_ok=True)
+                print("✅ Directorio 'data' creado automáticamente")
+            
+            # Configuración por defecto
+            config_por_defecto = {
+                "nombre_negocio": "Mi Negocio",
+                "tema": "claro",
+                "iva": 0.16,
+                "logo_path": "",
+                "moneda": "MXN"
+            }
+            
+            # Verificar si existe config.json, si no, crearlo
+            config_path = os.path.join(data_dir, "config.json")
+            if not os.path.exists(config_path):
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config_por_defecto, f, indent=4, ensure_ascii=False)
+                print("✅ Archivo config.json creado con valores por defecto")
+            
+            # Verificar si existe config_demo.json (para el sistema de licencias)
+            config_demo_path = os.path.join(data_dir, "config_demo.json")
+            if not os.path.exists(config_demo_path):
+                config_demo_por_defecto = {"ventas_realizadas": 0}
+                with open(config_demo_path, 'w', encoding='utf-8') as f:
+                    json.dump(config_demo_por_defecto, f, indent=4)
+                print("✅ Archivo config_demo.json creado")
+                
+            # Verificar si existe la base de datos
+            db_path = os.path.join(data_dir, "caja_registradora.db")
+            if not os.path.exists(db_path):
+                print("⚠️ Base de datos no encontrada - Se creará al iniciar")
+                # La base de datos se creará automáticamente cuando se inicialice DatabaseManager
+                
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error creando configuración por defecto: {e}")
+            return False
+
     def cargar_configuracion(self):
-        """Cargar configuración desde archivo - DEBE SER EL PRIMER MÉTODO"""
+        """Cargar configuración desde archivo - CON MANEJO DE ERRORES MEJORADO"""
         try:
             self.config = config_manager.load_config()
-            if 'tema' not in self.config:
-                self.config['tema'] = 'claro'
+            
+            # ✅ GARANTIZAR que siempre tengamos las claves mínimas necesarias
+            claves_requeridas = {
+                'tema': 'claro',
+                'nombre_negocio': 'Mi Negocio', 
+                'iva': 0.16,
+                'logo_path': '',
+                'moneda': 'MXN'
+            }
+            
+            config_actualizada = False
+            for clave, valor_por_defecto in claves_requeridas.items():
+                if clave not in self.config:
+                    self.config[clave] = valor_por_defecto
+                    config_actualizada = True
+                    print(f"✅ Clave agregada: {clave} = {valor_por_defecto}")
+            
+            if config_actualizada:
                 config_manager.update_config(self.config)
-                print("✅ Tema agregado por defecto")
+                print("✅ Configuración actualizada con valores por defecto")
+                
             print(f"🎯 Configuración cargada: {len(self.config)} opciones")
+            
         except Exception as e:
             print(f"❌ Error cargando configuración: {e}")
-            self.config = {"tema": "claro"}  # Configuración por defecto
+            # Configuración de emergencia
+            self.config = {
+                "tema": "claro",
+                "nombre_negocio": "Mi Negocio",
+                "iva": 0.16,
+                "logo_path": "",
+                "moneda": "MXN"
+            }
+            print("⚠️ Usando configuración de emergencia")
 
     def guardar_configuracion_actualizada(self):
         """Asegurar que la configuración tenga todas las claves necesarias"""
@@ -189,12 +280,15 @@ class CajaGUI(QWidget):
         event.accept()
 
     def verificar_licencia(self):
-        """Verificar licencia con importación corregida - VERSIÓN ACTUALIZADA"""
+        """Verificar licencia con importación corregida"""
         try:
-            print("🔍 Verificando licencia (seguridad avanzada)...")
+            #print("🔍 Verificando licencia (seguridad avanzada)...")
+            print("🔍 VERIFICANDO LICENCIA EN WINDOWS...")
+            print(f"🖥️  Equipo ID en Windows: {self.license_manager.equipo_id}")
+            print(f"📋 Tipo de licencia: {self.license_manager.tipo_licencia}")
             
-            # Verificar licencia actual con seguridad avanzada
-            if self.license_manager.verificar_licencia():
+            # Cambiar verificar_licencia() por validar_licencia()
+            if self.license_manager.validar_licencia():
                 info = self.license_manager.obtener_info_licencia()
                 print(f"✅ Licencia verificada correctamente - Tipo: {info['tipo']} - Seguridad: {info.get('seguridad', 'avanzada')}")
                 return True
@@ -219,7 +313,8 @@ class CajaGUI(QWidget):
                 return False
                 
             # Verificar nuevamente después del diálogo
-            if self.license_manager.verificar_licencia():
+            # También aquí cambiar por validar_licencia()
+            if self.license_manager.validar_licencia():
                 info = self.license_manager.obtener_info_licencia()
                 print(f"✅ Licencia activada correctamente - Seguridad: {info.get('seguridad', 'avanzada')}")
                 return True

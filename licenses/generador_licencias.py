@@ -4,6 +4,9 @@ import hashlib
 import hmac
 import base64
 import os
+import uuid
+import socket
+import platform
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -55,6 +58,70 @@ class GeneradorLicencias:
     def __init__(self):
         # 🔐 SISTEMA DE SEGURIDAD AVANZADO
         self.security = SecurityManager()
+
+    def diagnosticar_generador(self):
+        """Diagnóstico completo del equipo_id en el generador"""
+        print("\n" + "="*60)
+        print("🔍 DIAGNÓSTICO GENERADOR (LINUX)")
+        print("="*60)
+        
+        import socket
+        import platform
+        import subprocess
+        
+        # 1. Hostname
+        hostname = socket.gethostname()
+        print(f"📟 Hostname: {hostname}")
+        
+        # 2. MAC Address
+        mac_address = uuid.getnode()
+        print(f"📟 MAC (decimal): {mac_address}")
+        mac = ':'.join(['{:02x}'.format((mac_address >> elements) & 0xff) 
+                       for elements in range(0,2*6,2)][::-1])
+        print(f"📟 MAC (formateada): {mac}")
+        
+        # 3. Sistema Operativo
+        sistema = platform.system()
+        version = platform.release()
+        print(f"💻 Sistema: {sistema} {version}")
+        
+        # 4. Identificador específico de plataforma
+        platform_id = ""
+        if sistema == "Windows":
+            try:
+                result = subprocess.check_output('wmic csproduct get uuid', shell=True, text=True, stderr=subprocess.DEVNULL)
+                lines = [line.strip() for line in result.split('\n') if line.strip()]
+                if len(lines) > 1:
+                    platform_id = lines[1]
+                    print(f"🔑 Windows UUID: {platform_id}")
+                else:
+                    platform_id = "windows_no_uuid"
+                    print("❌ No se pudo obtener UUID Windows")
+            except Exception as e:
+                platform_id = f"windows_error_{str(e)[:20]}"
+                print(f"❌ Error UUID Windows: {e}")
+        else:
+            try:
+                with open('/etc/machine-id', 'r') as f:
+                    platform_id = f.read().strip()
+                print(f"🔑 Linux Machine ID: {platform_id}")
+            except Exception as e:
+                platform_id = f"linux_error_{str(e)[:20]}"
+                print(f"❌ Error Machine ID: {e}")
+        
+        # 5. Base para el ID
+        id_base = f"{hostname}_{mac}_{sistema}_{platform_id}"
+        print(f"📄 Base para ID: {id_base}")
+        
+        # 6. Hash final
+        hash_completo = hashlib.sha3_512(id_base.encode()).hexdigest()
+        equipo_id = hash_completo[:32]
+        print(f"🔒 Hash completo: {hash_completo}")
+        print(f"🎯 Equipo ID (truncado): {equipo_id}")
+        print(f"📏 Longitud: {len(equipo_id)} caracteres")
+        
+        print("="*60)
+        return equipo_id
     
     def generar_licencia_avanzada(self, codigo_licencia, duracion_dias=30, id_cliente="", tipo="premium", equipo_id=None):
         """Genera una licencia válida con seguridad avanzada - VERSIÓN CON EQUIPO_ID"""
@@ -69,10 +136,10 @@ class GeneradorLicencias:
                 "duracion_dias": duracion_dias,
                 "id_cliente": id_cliente or f"CLI_{datetime.now().strftime('%Y%m%d%H%M%S')}",
                 "tipo": tipo,
-                "version": "2.1",  # ✅ NUEVA VERSIÓN CON EQUIPO_ID
+                "version": "2.1",  # NUEVA VERSIÓN CON EQUIPO_ID
                 "fecha_generacion": datetime.now().isoformat(),
                 "id_instalacion": self.generar_id_instalacion_unico(),
-                "equipo_id": equipo_id  # ✅ NUEVO CAMPO CRÍTICO
+                "equipo_id": equipo_id  # NUEVO CAMPO CRÍTICO
             }
             
             # 🔐 CAPA 1: Hash HMAC-SHA512 (INCLUYE EQUIPO_ID)
@@ -113,28 +180,24 @@ class GeneradorLicencias:
         return hashlib.sha3_512(cadena.encode()).hexdigest()
     
     def generar_id_instalacion_unico(self):
-        """Genera ID único de instalación más robusto"""
+        """Genera ID único de instalación PORTABLE"""
         try:
             import socket
-            import uuid
-            import platform
             
-            # Combinar múltiples fuentes de identificación
+            # ✅ MISMA LÓGICA PORTABLE
             hostname = socket.gethostname()
-            mac = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) 
-                           for elements in range(0,2*6,2)][::-1])
-            sistema = platform.system() + platform.release()
+            mac_address = uuid.getnode()
+            mac = ':'.join(['{:02x}'.format((mac_address >> elements) & 0xff) 
+                        for elements in range(0,2*6,2)][::-1])
             
-            # Combinar y hashear
-            id_base = f"{hostname}_{mac}_{sistema}_{datetime.now().timestamp()}"
-            
-            # Usar SHA3-512 para mayor seguridad
+            id_base = f"{hostname}_{mac}"
             return hashlib.sha3_512(id_base.encode()).hexdigest()[:32]
             
         except:
-            # Fallback seguro
-            return hashlib.sha3_512(str(datetime.now().timestamp()).encode()).hexdigest()[:32]
-    
+            import socket
+            fallback_base = f"portable_{socket.gethostname()}"
+            return hashlib.sha3_512(fallback_base.encode()).hexdigest()[:32]
+        
     def guardar_licencia(self, licencia, archivo_salida):
         """Guarda la licencia con rutas absolutas"""
         try:
@@ -454,5 +517,11 @@ if __name__ == "__main__":
     print("   • Validación multi-capa")
     print("   • Checksums SHA3-512 para integridad")
     print("   • IDs de instalación únicos y robustos\n")
+
+    # Código temporal para probar
+    if __name__ == "__main__":
+        generador = GeneradorLicencias()
+        test_id = generador.generar_id_instalacion_unico()
+        print(f"🎯 Generador - ID generado: {test_id}")
     
     menu_simple()
