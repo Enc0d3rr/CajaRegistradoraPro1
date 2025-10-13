@@ -44,47 +44,21 @@ if es_windows():
     try:
         import ctypes
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
-        print("✅ Configuración DPI aplicada para Windows")
-    except Exception as e:
-        print(f"⚠️ No se pudo configurar DPI: {e}")
+    except Exception:
+        pass
 
 class CajaGUI(QWidget):
     def __init__(self):
         super().__init__()
 
-        # INICIALIZAR CONFIGURACIÓN PRIMERO
+        # INICIALIZAR CONFIGURACIÓN
         self.inicializar_configuracion_por_defecto()
+        self.cargar_configuracion()
+        self.config = config_manager.load_config()
+
+        # INICIALIZAR GESTOR DE LICENCIAS
+        self.license_manager = LicenseManager()
         
-        # Cargar y verificar configuración
-        self.cargar_configuracion()
-
-        self.config = config_manager.load_config()
-
-        # DIAGNÓSTICO DE CONFIGURACIÓN
-        print("=== DIAGNÓSTICO INICIAL CONFIGURACIÓN ===")
-        print(f"📋 Configuración cargada: {self.config}")
-        print(f"📁 Logo path: {self.config.get('logo_path', 'NO EXISTE')}")
-        print(f"🏪 Nombre negocio: {self.config.get('nombre_negocio', 'NO EXISTE')}")
-        print(f"🎨 Tema: {self.config.get('tema', 'NO EXISTE')}")
-
-        # INICIALIZAR GESTOR DE LICENCIAS
-        self.license_manager = LicenseManager()
-
-        # Cargar y verificar configuración
-        self.cargar_configuracion()
-
-        self.config = config_manager.load_config()
-
-        # DIAGNÓSTICO DE CONFIGURACIÓN
-        print("=== DIAGNÓSTICO INICIAL CONFIGURACIÓN ===")
-        print(f"📋 Configuración cargada: {self.config}")
-        print(f"📁 Logo path: {self.config.get('logo_path', 'NO EXISTE')}")
-        print(f"🏪 Nombre negocio: {self.config.get('nombre_negocio', 'NO EXISTE')}")
-        print(f"🎨 Tema: {self.config.get('tema', 'NO EXISTE')}")
-
-        # INICIALIZAR GESTOR DE LICENCIAS
-        self.license_manager = LicenseManager()
-
         # VERIFICAR LICENCIA AL INICIAR 
         if not self.verificar_licencia():
             print("❌ Licencia no válida, cerrando aplicación")
@@ -105,8 +79,6 @@ class CajaGUI(QWidget):
         if not hasattr(self, 'current_user') or self.current_user is None:
             print("❌ No se pudo autenticar usuario - Cerrando aplicación")
             sys.exit(1)
-
-        print(f"✅ Usuario autenticado: {self.current_user['nombre']}")
             
         # Inicializar interfaz
         self.init_ui()
@@ -119,7 +91,6 @@ class CajaGUI(QWidget):
             data_dir = "data"
             if not os.path.exists(data_dir):
                 os.makedirs(data_dir, exist_ok=True)
-                print("✅ Directorio 'data' creado automáticamente")
             
             # Configuración por defecto
             config_por_defecto = {
@@ -135,21 +106,13 @@ class CajaGUI(QWidget):
             if not os.path.exists(config_path):
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(config_por_defecto, f, indent=4, ensure_ascii=False)
-                print("✅ Archivo config.json creado con valores por defecto")
             
-            # Verificar si existe config_demo.json (para el sistema de licencias)
+            # Verificar si existe config_demo.json
             config_demo_path = os.path.join(data_dir, "config_demo.json")
             if not os.path.exists(config_demo_path):
                 config_demo_por_defecto = {"ventas_realizadas": 0}
                 with open(config_demo_path, 'w', encoding='utf-8') as f:
                     json.dump(config_demo_por_defecto, f, indent=4)
-                print("✅ Archivo config_demo.json creado")
-                
-            # Verificar si existe la base de datos
-            db_path = os.path.join(data_dir, "caja_registradora.db")
-            if not os.path.exists(db_path):
-                print("⚠️ Base de datos no encontrada - Se creará al iniciar")
-                # La base de datos se creará automáticamente cuando se inicialice DatabaseManager
                 
             return True
             
@@ -158,11 +121,11 @@ class CajaGUI(QWidget):
             return False
 
     def cargar_configuracion(self):
-        """Cargar configuración desde archivo - CON MANEJO DE ERRORES MEJORADO"""
+        """Cargar configuración desde archivo"""
         try:
             self.config = config_manager.load_config()
             
-            # ✅ GARANTIZAR que siempre tengamos las claves mínimas necesarias
+            # Garantizar claves mínimas necesarias
             claves_requeridas = {
                 'tema': 'claro',
                 'nombre_negocio': 'Mi Negocio', 
@@ -176,14 +139,10 @@ class CajaGUI(QWidget):
                 if clave not in self.config:
                     self.config[clave] = valor_por_defecto
                     config_actualizada = True
-                    print(f"✅ Clave agregada: {clave} = {valor_por_defecto}")
             
             if config_actualizada:
                 config_manager.update_config(self.config)
-                print("✅ Configuración actualizada con valores por defecto")
                 
-            print(f"🎯 Configuración cargada: {len(self.config)} opciones")
-            
         except Exception as e:
             print(f"❌ Error cargando configuración: {e}")
             # Configuración de emergencia
@@ -194,7 +153,6 @@ class CajaGUI(QWidget):
                 "logo_path": "",
                 "moneda": "MXN"
             }
-            print("⚠️ Usando configuración de emergencia")
 
     def guardar_configuracion_actualizada(self):
         """Asegurar que la configuración tenga todas las claves necesarias"""
@@ -202,30 +160,23 @@ class CajaGUI(QWidget):
             if 'tema' not in self.config:
                 self.config['tema'] = 'claro'
             config_manager.update_config(self.config)
-            print("✅ Configuración actualizada guardada al iniciar")
         except Exception as e:
             print(f"❌ Error actualizando configuración: {e}")
 
     def autenticar_usuario(self):
         """Autenticar usuario con manejo seguro de cierre"""
         try:
-            print("🔐 Iniciando autenticación de usuario...")
-            
-            # CORRECCIÓN: LoginDialog solo necesita db_manager
             login_dialog = LoginDialog(self.db_manager)
             login_dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowCloseButtonHint)
             
-            # Mostrar diálogo y esperar resultado
             result = login_dialog.exec()
             
-            # MANEJAR CIERRE CON LA X
             if result == QDialog.DialogCode.Rejected:
-                print("❌ Usuario canceló el login cerrando la ventana")
+                print("❌ Usuario canceló el login")
                 QMessageBox.information(None, "Información", "La aplicación se cerrará.")
                 QApplication.quit()
                 sys.exit(0)
                 
-            # CORRECCIÓN: Usar user_data en lugar de get_authenticated_user()
             if hasattr(login_dialog, 'user_data'):
                 self.current_user = {
                     "id": login_dialog.user_data['id'],
@@ -247,7 +198,6 @@ class CajaGUI(QWidget):
             return True
             
         except SystemExit:
-            # Re-lanzar SystemExit para salida limpia
             raise
         except Exception as e:
             print(f"❌ Error en autenticación: {e}")
@@ -258,206 +208,151 @@ class CajaGUI(QWidget):
     def guardar_configuracion_al_cerrar(self):
         """Guardar configuración al cerrar la aplicación"""
         try:
-            print("💾 Guardando configuración al cerrar...")
             config_actual = config_manager.load_config()
             
             if hasattr(self, 'config') and 'tema' in self.config:
                 config_actual['tema'] = self.config['tema']
-                print(f"✅ Guardando tema: {self.config['tema']}")
-            else:
-                config_actual['tema'] = 'claro'
-                print("⚠️ Usando tema por defecto")
             
             config_manager.update_config(config_actual)
-            print("✅ Configuración guardada al cerrar")
         except Exception as e:
             print(f"❌ Error guardando configuración al cerrar: {e}")
 
     def closeEvent(self, event):
         """Se ejecuta cuando la ventana se cierra"""
-        print("🚪 Cerrando aplicación...")
         self.guardar_configuracion_al_cerrar()
         event.accept()
 
     def verificar_licencia(self):
-        """Verificar licencia con importación corregida"""
+        """Verificar licencia - PERMITE USAR DEMO SIN ACTIVAR INMEDIATAMENTE"""
         try:
-            #print("🔍 Verificando licencia (seguridad avanzada)...")
-            print("🔍 VERIFICANDO LICENCIA EN WINDOWS...")
-            print(f"🖥️  Equipo ID en Windows: {self.license_manager.equipo_id}")
-            print(f"📋 Tipo de licencia: {self.license_manager.tipo_licencia}")
-            
-            # Cambiar verificar_licencia() por validar_licencia()
+            # ✅ PRIMERO verificar si ya tiene licencia válida
             if self.license_manager.validar_licencia():
                 info = self.license_manager.obtener_info_licencia()
-                print(f"✅ Licencia verificada correctamente - Tipo: {info['tipo']} - Seguridad: {info.get('seguridad', 'avanzada')}")
+                print(f"✅ Licencia verificada - Tipo: {info['tipo']} - Plan: {info.get('plan', 'premium')}")
                 return True
             
-            print("⚠️ Licencia no válida, mostrando diálogo de activación...")
+            # ✅ SI NO TIENE LICENCIA, verificar si puede usar demo
+            info_demo = self.license_manager.obtener_info_licencia()
+            if info_demo['tipo'] == 'demo' and info_demo['estado'] == 'activa':
+                print(f"🔬 Modo demo activo - Ventas restantes: {info_demo['dias_restantes']}")
+                return True  # ✅ PERMITIR USAR DEMO
             
-            # Mostrar diálogo de activación
+            # ✅ SOLO si la demo está expirada, mostrar diálogo de activación
+            print("❌ Licencia no válida y demo expirada, mostrando opciones...")
+            
             from licenses.dialogo_activacion import DialogoActivacion
             
-            # Pasar el tema actual para consistencia
             tema_actual = self.config.get('tema', 'claro')
             activacion_dialog = DialogoActivacion(self.license_manager, self, tema_actual)
             activacion_dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowCloseButtonHint)
             
             result = activacion_dialog.exec()
             
-            # Manejar cierre con X
             if result == QDialog.DialogCode.Rejected:
-                print("❌ Usuario cerró la ventana de activación")
-                QMessageBox.information(None, "Información", 
-                                    "Se requiere una licencia válida. La aplicación se cerrará.")
-                return False
+                # Usuario cerró el diálogo, preguntar si quiere usar demo
+                respuesta = QMessageBox.question(
+                    self, 
+                    "Versión Demo",
+                    "¿Desea usar la versión DEMO con 50 ventas de prueba?\n\n"
+                    "Puede activar una licencia premium después desde el menú.",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
                 
-            # Verificar nuevamente después del diálogo
-            # También aquí cambiar por validar_licencia()
+                if respuesta == QMessageBox.StandardButton.Yes:
+                    print("✅ Usuario eligió usar versión demo")
+                    return True
+                else:
+                    QMessageBox.information(self, "Información", "La aplicación se cerrará.")
+                    return False
+                    
+            # Si activó licencia, verificar nuevamente
             if self.license_manager.validar_licencia():
                 info = self.license_manager.obtener_info_licencia()
-                print(f"✅ Licencia activada correctamente - Seguridad: {info.get('seguridad', 'avanzada')}")
+                print(f"✅ Licencia activada - Plan: {info.get('plan', 'premium')}")
                 return True
             else:
-                QMessageBox.critical(None, "Error de Licencia", 
-                                "No se pudo activar la licencia. La aplicación se cerrará.")
-                return False
-                
+                # Si falló la activación, ofrecer demo
+                respuesta = QMessageBox.question(
+                    self,
+                    "Activación Fallida", 
+                    "No se pudo activar la licencia.\n\n"
+                    "¿Desea usar la versión DEMO con 50 ventas de prueba?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                return respuesta == QMessageBox.StandardButton.Yes
+                    
         except Exception as e:
             print(f"❌ Error verificando licencia: {e}")
-            QMessageBox.critical(None, "Error", 
-                            f"Error al verificar la licencia: {str(e)}")
-            return False
-
-    def _login_emergencia(self):
-        """Login de emergencia"""
-        try:
-            from PyQt6.QtWidgets import QInputDialog, QMessageBox
-            
-            usuario, ok = QInputDialog.getText(self, "Acceso al Sistema", "Usuario:")
-            if not ok or not usuario:
-                self.current_user = None
-                return
-                
-            contraseña, ok = QInputDialog.getText(
-                self, "Acceso al Sistema", "Contraseña:", 
-                echo=QLineEdit.EchoMode.Password
-            )
-            
-            if not ok or not contraseña:
-                self.current_user = None
-                return
-            
-            if usuario == "admin" and contraseña == "admin123":
-                self.current_user = {
-                    "id": 1, "username": "admin", "nombre": "Administrador", "rol": "administrador"
-                }
-                QMessageBox.information(self, "Acceso Concedido", "Bienvenido Administrador")
-                print("✅ Login de emergencia exitoso")
-            else:
-                QMessageBox.warning(self, "Acceso Denegado", "Credenciales incorrectas")
-                self.current_user = None
-        except Exception as e:
-            print(f"❌ Error en login de emergencia: {e}")
-            self.current_user = {"id": 1, "username": "admin", "nombre": "Administrador", "rol": "administrador"}
+            # En caso de error, permitir demo
+            QMessageBox.warning(self, "Error", f"Error al verificar licencia: {str(e)}\n\nSe iniciará en modo demo.")
+            return True
 
     def aplicar_tema(self):
-        """Aplicar tema desde archivo themes.py - VERSIÓN MEJORADA"""
-        # Ahora usa el método mejorado para consistencia
-        self.aplicar_tema_mejorado()
-
-    def aplicar_tema_mejorado(self):
-        """Aplicar tema mejorado - VERSIÓN OPTIMIZADA"""
+        """Aplicar tema desde archivo themes.py"""
         tema = self.config.get('tema', 'claro')
-        print(f"🎨 Aplicando tema optimizado: {tema}")
         
         try:
             estilo = obtener_tema(tema)
-            
-            # OPTIMIZACIÓN: Aplicar solo a los contenedores principales
             self.setStyleSheet(estilo)
             
-            # OPTIMIZACIÓN: Aplicar solo a widgets específicos en lugar de todos recursivamente
             widgets_principales = [
-                self.tabs,  # El QTabWidget principal
-                self.findChild(QGroupBox),  # Primer QGroupBox que encuentre
+                self.tabs,
+                self.findChild(QGroupBox),
             ]
             
             for widget in widgets_principales:
                 if widget:
                     widget.setStyleSheet(estilo)
             
-            # OPTIMIZACIÓN: Actualización diferida
             QTimer.singleShot(50, self.forzar_actualizacion_ui)
             
-            print(f"✅ Tema {tema} aplicado correctamente (optimizado)")
-            
         except Exception as e:
-            print(f"❌ Error aplicando tema optimizado: {e}")
+            print(f"❌ Error aplicando tema: {e}")
 
     def forzar_actualizacion_ui(self):
-        """Forzar actualización de la UI después de un breve delay"""
+        """Forzar actualización de la UI"""
         self.update()
         self.repaint()
         QApplication.processEvents()
 
     def abrir_panel_configuracion(self):
-        """Abrir panel de configuración con manejo de cambios en tiempo real"""
+        """Abrir panel de configuración"""
         try:
             dialog = ConfigPanelDialog(self.db_manager, self.config, self)
-            
-            # CONECTAR SEÑAL DE CAMBIOS (verificar que no dé error)
             dialog.config_changed.connect(self.aplicar_cambios_configuracion)
-            
             dialog.exec()  
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo abrir configuración: {str(e)}")
 
-     # === MÉTODOS NUEVOS PARA CAMBIOS EN TIEMPO REAL ===
-
     def aplicar_cambios_configuracion(self, nuevo_config):
-        """Aplica los cambios de configuración en tiempo real - VERSIÓN OPTIMIZADA"""
+        """Aplica los cambios de configuración en tiempo real"""
         try:
-            print("🔄 Aplicando cambios de configuración (optimizado)...")
-            
-            # ACTUALIZAR CONFIGURACIÓN
             self.config.update(nuevo_config)
+            self.aplicar_tema()
             
-            # APLICAR NUEVO TEMA INMEDIATAMENTE (optimizado)
-            self.aplicar_tema_mejorado()
-            
-            # ACTUALIZAR NOMBRE DEL NEGOCIO EN LA VENTANA
             if 'nombre_negocio' in nuevo_config:
                 nuevo_nombre = nuevo_config['nombre_negocio']
                 self.setWindowTitle(f"{nuevo_nombre} - Usuario: {self.current_user['nombre']}")
-                print(f"✅ Nombre actualizado: {nuevo_nombre}")
             
-            # ACTUALIZAR LOGO SI CAMBIÓ (optimizado)
             if 'logo_path' in nuevo_config:
                 QTimer.singleShot(100, self.actualizar_logo_en_tiempo_real)
             
-            # GUARDAR CONFIGURACIÓN PERSISTENTE (en segundo plano)
             QTimer.singleShot(200, self.guardar_configuracion_fondo)
-            
-            print("✅ Cambios de configuración aplicados (sin bloqueo)")
             
         except Exception as e:
             print(f"❌ Error aplicando cambios: {e}")
 
     def guardar_configuracion_fondo(self):
-        """Guardar configuración en segundo plano para no bloquear la UI"""
+        """Guardar configuración en segundo plano"""
         try:
             config_manager.update_config(self.config)
-            print("💾 Configuración guardada en segundo plano")
         except Exception as e:
             print(f"❌ Error guardando configuración: {e}")
             
-        
     def actualizar_logo_en_tiempo_real(self):
-        """Actualiza el logo en tiempo real - VERSIÓN OPTIMIZADA"""
+        """Actualiza el logo en tiempo real"""
         try:
-            # Buscar específicamente el logo label
             logo_label = None
             header_layout = self.findChild(QHBoxLayout)
             
@@ -470,9 +365,6 @@ class CajaGUI(QWidget):
             
             if logo_label:
                 self.cargar_logo(logo_label)
-                print("✅ Logo actualizado (optimizado)")
-            else:
-                print("⚠️ Logo label no encontrado")
                     
         except Exception as e:
             print(f"❌ Error actualizando logo: {e}")
@@ -672,20 +564,18 @@ class CajaGUI(QWidget):
         self.total_label.setStyleSheet("font-size: 18px; font-weight: bold;")
         footer_layout.addWidget(self.total_label)
 
-        # Espacio elástico que empuja el resto hacia la derecha
+        # Espacio elástico
         footer_layout.addStretch(1)
 
-        # Método de pago agrupado y pegado al combobox
+        # Método de pago
         metodo_pago_layout = QHBoxLayout()
         metodo_pago_layout.addWidget(QLabel("Método de pago:"))
         self.metodo_pago_combo = QComboBox()
         self.metodo_pago_combo.addItems(self.metodos_pago)
         metodo_pago_layout.addWidget(self.metodo_pago_combo)
-        metodo_pago_layout.setSpacing(5)  # Espacio reducido entre label y combobox
+        metodo_pago_layout.setSpacing(5)
 
-        # Añadir el grupo de método de pago al footer
         footer_layout.addLayout(metodo_pago_layout)
-
         layout.addLayout(footer_layout)
 
     def setup_inventario_tab(self, layout):
@@ -705,7 +595,6 @@ class CajaGUI(QWidget):
         summary_group.setLayout(summary_layout)
         layout.addWidget(summary_group)
         
-        # Llamar al método para cargar datos iniciales
         self.actualizar_resumen_inventario()
 
     def setup_reportes_tab(self, layout):
@@ -725,10 +614,6 @@ class CajaGUI(QWidget):
         layout.addWidget(sales_group)
         self.actualizar_resumen_ventas_hoy()
 
-        sales_group.setLayout(sales_layout)
-        layout.addWidget(sales_group)
-        self.actualizar_resumen_ventas_hoy()
-
     # ===== MÉTODOS DE NEGOCIO =====
     def cargar_productos(self):
         self.lista.clear()
@@ -743,10 +628,9 @@ class CajaGUI(QWidget):
         texto = self.search_input.text().lower().strip()
         for i in range(self.lista.count()):
             item = self.lista.item(i)
-        
-            if not texto:  # Texto vacío = mostrar todos los items
+            if not texto:
                 item.setHidden(False)
-            else:  # Hay texto = filtrar
+            else:
                 item.setHidden(texto not in item.text().lower())
 
     def agregar_producto(self):
@@ -814,8 +698,6 @@ class CajaGUI(QWidget):
 
         iva = self.config.get("iva", 0.18)
         total = self.calcular_total() * (1 + iva)
-    
-        # CAMBIAR TOTAL:
         total_formateado = formato_moneda_mx(total)
         self.total_label.setText(f"Total: {total_formateado}")
 
@@ -825,7 +707,7 @@ class CajaGUI(QWidget):
         QMessageBox.information(self, "Venta cancelada", "Carrito vacío.")
 
     def finalizar_venta(self):
-        # VERIFICAR LICENCIA DEMO ANTES DE VENDER
+        # VERIFICAR LICENCIA DEMO
         if self.license_manager.tipo_licencia == "demo":
             ventas_realizadas = self.license_manager.config_demo["ventas_realizadas"]
             if ventas_realizadas >= self.license_manager.limite_ventas_demo:
@@ -853,7 +735,6 @@ class CajaGUI(QWidget):
             venta_id = cursor.lastrowid
             
             for item in self.carrito:
-                # VERIFICAR QUE EL PRODUCTO EXISTA
                 cursor.execute("SELECT id, stock FROM productos WHERE codigo = ? AND activo = 1", (item['codigo'],))
                 resultado = cursor.fetchone()
                 
@@ -864,7 +745,6 @@ class CajaGUI(QWidget):
                 
                 producto_id, stock_actual = resultado
                 
-                # VERIFICAR STOCK SUFICIENTE
                 if stock_actual < item['cantidad']:
                     QMessageBox.critical(self, "Error", 
                                     f"Stock insuficiente para {item['codigo']}\nStock actual: {stock_actual}, Solicitado: {item['cantidad']}")
@@ -891,16 +771,14 @@ class CajaGUI(QWidget):
         QMessageBox.information(self, "Venta finalizada", 
                                 f"Total: {total_formateado}\nMétodo: {metodo_pago}\nTicket: {ticket_path}")
         
-        # REGISTRAR VENTA EN EL CONTADOR DEMO
+        # REGISTRAR VENTA EN CONTADOR DEMO
         self.license_manager.registrar_venta()
-        self.actualizar_barra_estado_licencia()
         self.actualizar_resumen_ventas_hoy()
-        self.diagnosticar_ventas_hoy()
         
         # VERIFICAR LICENCIA
         if not self.license_manager.validar_licencia():
             if self.mostrar_opciones_licencia_expirada():
-                print("✅ Licencia activada, continuando...")
+                print("✅ Licencia activada")
             else:
                 QMessageBox.information(self, "Información", "La aplicación se cerrará.")
                 self.close()
@@ -909,8 +787,6 @@ class CajaGUI(QWidget):
     def actualizar_resumen_ventas_hoy(self):
         """Actualiza el resumen de ventas del día actual"""
         try:
-            print("🔄 Actualizando resumen de ventas hoy...")
-            
             hoy = datetime.now().strftime("%Y-%m-%d")
             fecha_desde = f"{hoy} 00:00:00"
             fecha_hasta = f"{hoy} 23:59:59"
@@ -934,10 +810,7 @@ class CajaGUI(QWidget):
                 else:
                     count = 0
                     total = 0
-                
-                print(f"📊 Ventas encontradas hoy: {count}, Total: {total}")
             
-            # ACTUALIZAR SIEMPRE - incluso si no hay ventas
             if hasattr(self, 'sales_today_summary') and self.sales_today_summary:
                 if count > 0:
                     texto = f"""📊 VENTAS HOY ({hoy})
@@ -950,85 +823,26 @@ class CajaGUI(QWidget):
     • N° de ventas: 0"""
                 
                 self.sales_today_summary.setText(texto)
-                print(f"✅ Resumen ventas actualizado: {count} ventas, {formato_moneda_mx(total)}")
                     
         except Exception as e:
-            print(f"❌ Error actualizando resumen de ventas: {e}")
-            # ✅ MOSTRAR ERROR EN LA INTERFAZ
             if hasattr(self, 'sales_today_summary') and self.sales_today_summary:
                 self.sales_today_summary.setText(f"❌ Error cargando ventas: {str(e)}")
 
-    def diagnosticar_ventas_hoy(self):
-        """Función de diagnóstico para ventas de hoy"""
-        try:
-            hoy = datetime.now().strftime("%Y-%m-%d")
-            fecha_desde = f"{hoy} 00:00:00"
-            fecha_hasta = f"{hoy} 23:59:59"
-            
-            print(f"=== DIAGNÓSTICO VENTAS HOY ===")
-            print(f"📅 Fecha: {hoy}")
-            print(f"🔍 Rango: {fecha_desde} a {fecha_hasta}")
-            
-            with self.db_manager.get_connection() as conn:
-                cursor = conn.cursor()
-                
-                # Verificar todas las ventas de hoy
-                cursor.execute("""
-                    SELECT id, fecha, total, estado 
-                    FROM ventas 
-                    WHERE fecha BETWEEN ? AND ?
-                    ORDER BY fecha DESC
-                """, (fecha_desde, fecha_hasta))
-                
-                ventas_hoy = cursor.fetchall()
-                print(f"📦 Ventas encontradas: {len(ventas_hoy)}")
-                
-                for venta in ventas_hoy:
-                    print(f"   Venta #{venta[0]}: {venta[1]} - {venta[2]} - {venta[3]}")
-                
-                # Verificar conteo
-                cursor.execute("""
-                    SELECT COUNT(*), SUM(total) 
-                    FROM ventas 
-                    WHERE fecha BETWEEN ? AND ? AND estado = 'completada'
-                """, (fecha_desde, fecha_hasta))
-                
-                count, total = cursor.fetchone()
-                print(f"📊 Resumen - Count: {count}, Total: {total}")
-                
-            return len(ventas_hoy)
-            
-        except Exception as e:
-            print(f"❌ Error en diagnóstico: {e}")
-            return 0
-
     def actualizar_resumen_inventario(self):
-        """Actualiza el resumen de inventario en tiempo real"""
+        """Actualiza el resumen de inventario"""
         try:
             with self.db_manager.get_connection() as conn:
                 cursor = conn.cursor()
                 
-                # Productos con stock bajo
-                cursor.execute("""
-                    SELECT COUNT(*) 
-                    FROM productos 
-                    WHERE stock <= stock_minimo AND activo = 1
-                """)
+                cursor.execute("SELECT COUNT(*) FROM productos WHERE stock <= stock_minimo AND activo = 1")
                 stock_bajo = cursor.fetchone()[0] or 0
                 
-                # Total de productos activos
                 cursor.execute("SELECT COUNT(*) FROM productos WHERE activo = 1")
                 total_productos = cursor.fetchone()[0] or 0
                 
-                # Productos sin stock
                 cursor.execute("SELECT COUNT(*) FROM productos WHERE stock = 0 AND activo = 1")
                 sin_stock = cursor.fetchone()[0] or 0
-                
-                # Productos que necesitan atención inmediata (stock = 0)
-                cursor.execute("SELECT COUNT(*) FROM productos WHERE stock = 0 AND activo = 1")
-                sin_stock_urgente = cursor.fetchone()[0] or 0
         
-            # Actualizar la interfaz si el widget existe
             if hasattr(self, 'inventory_summary') and self.inventory_summary:
                 if total_productos > 0:
                     texto = f"""📊 RESUMEN DE INVENTARIO:
@@ -1036,7 +850,6 @@ class CajaGUI(QWidget):
     • 📦 Productos activos: {total_productos}
     • ⚠️  Productos con stock bajo: {stock_bajo}
     • 🔴 Productos sin stock: {sin_stock}
-    • 🚨 Necesitan atención urgente: {sin_stock_urgente}
 
     """
                     if stock_bajo > 0 or sin_stock > 0:
@@ -1047,14 +860,82 @@ class CajaGUI(QWidget):
                     texto = "📦 No hay productos en el inventario\n\n💡 Agregue productos desde 'Gestor de Inventario'"
                 
                 self.inventory_summary.setText(texto)
-                print(f"✅ Resumen inventario actualizado: {total_productos} productos")
                     
         except Exception as e:
-            print(f"❌ Error actualizando resumen de inventario: {e}")
             if hasattr(self, 'inventory_summary') and self.inventory_summary:
                 self.inventory_summary.setText("❌ Error cargando información de inventario")
 
-# ==== SECCION DE LICENSIA ===
+    # ==== SISTEMA DE LICENCIAS MEJORADO ====
+
+    def mostrar_estado_licencia(self):
+        """Muestra estado de licencia"""
+        try:
+            from PyQt6.QtWidgets import QMessageBox, QPushButton
+    
+            info = self.license_manager.obtener_info_licencia()
+            tipo_licencia = self.license_manager.tipo_licencia
+        
+            if info['estado'] == 'activa':
+                if tipo_licencia == 'premium':
+                    plan = info.get('plan', 'premium')
+                    mensaje = f"💎 LICENCIA {plan.upper()} ACTIVA\n\n"
+                    if plan == "perpetua":
+                        mensaje += "• Licencia perpetua - Sin expiración\n"
+                    elif plan == "anual":
+                        mensaje += f"• Suscripción anual - {info['dias_restantes']} días restantes\n"
+                    else:
+                        mensaje += f"• {info['dias_restantes']} días restantes\n"
+                    mensaje += "• Todas las funciones desbloqueadas\n• Soporte incluído"
+                else:
+                    mensaje = f"🔬 VERSIÓN DEMO ACTIVA\n\nVentas restantes: {info['dias_restantes']}\nLímite total: {self.license_manager.limite_ventas_demo} ventas"
+            else:
+                mensaje = "❌ LICENCIA EXPIRADA O NO VÁLIDA"
+    
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Estado de Licencia")
+            msg_box.setText(mensaje)
+    
+            btn_activar = QPushButton("🎫 Activar Licencia")
+            btn_cerrar = QPushButton("Cerrar")
+    
+            msg_box.addButton(btn_activar, QMessageBox.ButtonRole.ActionRole)
+            msg_box.addButton(btn_cerrar, QMessageBox.ButtonRole.RejectRole)
+    
+            msg_box.exec()
+    
+            boton_presionado = msg_box.clickedButton()
+    
+            if boton_presionado == btn_activar:
+                self.mostrar_activacion()
+        
+        except Exception as e:
+            QMessageBox.information(self, "Licencia", "Estado: Activada")
+
+    def mostrar_activacion(self):
+        """Muestra diálogo de activación"""
+        try:
+            from licenses.dialogo_activacion import DialogoActivacion
+        
+            tema_actual = self.config.get('tema', 'claro')
+            dialogo = DialogoActivacion(self.license_manager, self, tema_actual)
+        
+            resultado = dialogo.exec()
+        
+            if resultado == QDialog.DialogCode.Accepted:
+                if self.license_manager.validar_licencia():
+                    info = self.license_manager.obtener_info_licencia()
+                    QMessageBox.information(
+                        self, 
+                        "✅ Activación Exitosa",
+                        f"Licencia {info.get('plan', 'premium')} activada correctamente!\n\n"
+                        f"Válida por: {info['dias_restantes']} días\n"
+                        f"Expira: {info['expiracion']}"
+                    )
+                else:
+                    QMessageBox.warning(self, "Error", "La activación no fue exitosa")
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Error", "No se pudo abrir el diálogo de activación")
 
     def mostrar_opciones_licencia_expirada(self):
         """Muestra opciones cuando la licencia demo expira"""
@@ -1064,41 +945,22 @@ class CajaGUI(QWidget):
         msg_box.setWindowTitle("Límite Demo Alcanzado")
         msg_box.setIcon(QMessageBox.Icon.Warning)
     
-        # Mensaje según el tipo de problema
-        if self.license_manager.tipo_licencia == "demo":
-            mensaje = f"""
-            ⚠️ HA ALCANZADO EL LÍMITE DE {self.license_manager.limite_ventas_demo} VENTAS
-        
-            La versión demo ha expirado. Para continuar usando el software:
-        
-            💎 **Opciones disponibles:**
-            • Activar una licencia premium (uso ilimitado)
-            • Contactar para adquirir una licencia
-            • Cerrar la aplicación
-        
-            📞 **Contacto:**
-            📧 ventas@cajaregistradora.com
-            📱 +52 55 1234 5678
+        mensaje = f"""
+        ⚠️ HA ALCANZADO EL LÍMITE DE {self.license_manager.limite_ventas_demo} VENTAS
+    
+        La versión demo ha expirado. Para continuar usando el software:
+    
+        💎 **Opciones disponibles:**
+        • Activar una licencia premium (uso ilimitado)
+        • Contactar para adquirir una licencia
+    
+        📞 **Contacto:**
+        📧 ventas@cajaregistradora.com
+        📱 +52 55 1234 5678
         """
-        else:
-            mensaje = """
-            ⚠️ LICENCIA REQUERIDA
-        
-            Para usar el software necesita una licencia válida.
-        
-            💎 **Opciones disponibles:**
-            • Activar una licencia premium
-            • Contactar para adquirir una licencia  
-            • Cerrar la aplicación
-        
-            📞 **Contacto:**
-            📧 ventas@cajaregistradora.com
-            📱 +52 55 1234 5678
-            """
     
         msg_box.setText(mensaje)
     
-        # Botones personalizados
         btn_activar = QPushButton("🎫 Activar Licencia Premium")
         btn_contacto = QPushButton("📞 Ver Información de Contacto")
         btn_cerrar = QPushButton("❌ Cerrar Aplicación")
@@ -1112,121 +974,23 @@ class CajaGUI(QWidget):
         boton_presionado = msg_box.clickedButton()
     
         if boton_presionado == btn_activar:
-            print("🎫 Usuario eligió activar licencia")
             if self.mostrar_activacion():
-                # Si la activación fue exitosa, verificar nuevamente
                 if self.license_manager.validar_licencia():
-                    QMessageBox.information(self, "✅ Éxito", "Licencia activada correctamente!")
-                    self.actualizar_barra_estado_licencia()
                     return True
                 else:
-                    QMessageBox.warning(self, "Error", "No se pudo activar la licencia")
                     return False
             else:
                 return False
             
         elif boton_presionado == btn_contacto:
-            print("📞 Usuario eligió ver contacto")
             self.mostrar_informacion_contacto()
-            # Después de ver contacto, volver a mostrar opciones
             return self.mostrar_opciones_licencia_expirada()
         
-        else:  # btn_cerrar
-            print("❌ Usuario eligió cerrar aplicación")
-            return False
-        
-    def actualizar_barra_estado_licencia(self):
-        """Método simplificado - Ya no muestra el cuadro de estado"""
-        # ✅ Este método ahora no hace nada visible, pero se mantiene
-        # para no romper otras partes del código que lo llaman
-        pass
-
-    def mostrar_estado_licencia(self):
-        """Muestra estado de licencia - VERSIÓN MEJORADA CON DEMO"""
-        try:
-            from PyQt6.QtWidgets import QMessageBox, QPushButton
-    
-            info = self.license_manager.obtener_info_licencia()
-            tipo_licencia = self.license_manager.tipo_licencia
-        
-            # Crear mensaje según el tipo de licencia
-            if info['estado'] == 'activa':
-                if tipo_licencia == 'premium':
-                    mensaje = f"💎 LICENCIA PREMIUM ACTIVA\n\nCaracterísticas:\n• Ventas ilimitadas\n• Sin restricciones\n• Soporte prioritario"
-                else:  # demo
-                    mensaje = f"🔬 VERSIÓN DEMO ACTIVA\n\nVentas restantes: {info['dias_restantes']}\nLímite total: {self.license_manager.limite_ventas_demo} ventas"
-            else:
-                mensaje = "❌ LICENCIA EXPIRADA O NO VÁLIDA"
-    
-            # Crear MessageBox personalizado
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle("Estado de Licencia")
-            msg_box.setText(mensaje)
-    
-            # Añadir botones personalizados
-            btn_activar = QPushButton("🎫 Activar Licencia Premium")
-            btn_validar = QPushButton("🔄 Validar Estado")
-            btn_cerrar = QPushButton("Cerrar")
-    
-            msg_box.addButton(btn_activar, QMessageBox.ButtonRole.ActionRole)
-            msg_box.addButton(btn_validar, QMessageBox.ButtonRole.ActionRole)
-            msg_box.addButton(btn_cerrar, QMessageBox.ButtonRole.RejectRole)
-    
-            # Ejecutar y capturar respuesta
-            msg_box.exec()
-    
-            # Ver qué botón se presionó
-            boton_presionado = msg_box.clickedButton()
-    
-            if boton_presionado == btn_activar:
-                print("🎫 Usuario eligió: Activar Licencia")
-                self.mostrar_activacion()
-            elif boton_presionado == btn_validar:
-                print("🔄 Usuario eligió: Validar")
-                self.validar_licencia_simple()
-            else:
-                print("❌ Usuario cerró el diálogo")
-        
-        except Exception as e:
-            print(f"❌ Error en mostrar_estado_licencia: {e}")
-            QMessageBox.information(self, "Licencia", "Estado: Activada")
-
-    def mostrar_activacion(self):
-        """Muestra diálogo de activación mejorado"""
-        try:
-            from licenses.dialogo_activacion import DialogoActivacion
-        
-            # PASAR EL TEMA ACTUAL AL DIÁLOGO
-            tema_actual = self.config.get('tema', 'claro')
-            dialogo = DialogoActivacion(self.license_manager, self, tema_actual)
-        
-            resultado = dialogo.exec()
-        
-            if resultado == QDialog.DialogCode.Accepted:
-                # Verificar si la activación fue exitosa
-                if self.license_manager.validar_licencia():
-                    info = self.license_manager.obtener_info_licencia()
-                    QMessageBox.information(
-                        self, 
-                        "✅ Activación Exitosa",
-                        f"Licencia premium activada correctamente!\n\n"
-                        f"Válida por: {info['dias_restantes']} días\n"
-                        f"Expira: {info['expiracion']}"
-                    )
-                    self.actualizar_barra_estado_licencia()
-                    return True
-                else:
-                    QMessageBox.warning(self, "Error", "La activación no fue exitosa")
-                    return False
-            return False
-            
-        except Exception as e:
-            print(f"❌ Error en mostrar_activacion: {e}")
-            QMessageBox.warning(self, "Error", "No se pudo abrir el diálogo de activación")
+        else:
             return False
         
     def mostrar_informacion_contacto(self):
-        """Muestra información de contacto detallada"""
+        """Muestra información de contacto"""
         mensaje = """
         💎 **INFORMACIÓN DE CONTACTO - LICENCIAS PREMIUM**
     
@@ -1236,35 +1000,16 @@ class CajaGUI(QWidget):
         📱 **Teléfono:** +52 55 1234 5678
         🌐 **Sitio web:** www.cajaregistradora.com
     
-        💰 **Beneficios de la licencia premium:**
-        • Ventas ilimitadas
-        • Sin restricciones de tiempo
-        • Soporte técnico prioritario
-        • Actualizaciones gratuitas
-        • Múltiples usuarios
+        💰 **Planes disponibles:**
+        • Licencia Perpetua: $2,800 MXN
+        • Suscripción Anual: $1,500 MXN/año  
+        • Plan Empresarial: $6,000 MXN
     
         ⏰ **Horario de atención:**
         Lunes a Viernes: 8:00 AM - 5:00 PM
-    
-        ¡Estamos para servirle!
         """
     
         QMessageBox.information(self, "Información de Contacto", mensaje)
-
-    def validar_licencia_simple(self):
-        """Valida la licencia - VERSIÓN SIMPLE"""
-        try:
-            if self.license_manager.validar_licencia():
-                info = self.license_manager.obtener_info_licencia()
-                if self.license_manager.tipo_licencia == "premium":
-                    QMessageBox.information(self, "✅ Válida", "Licencia premium activa y válida.")
-                else:
-                    QMessageBox.information(self, "🔬 Demo", f"Versión demo activa. {info['mensaje']}")
-            else:
-                QMessageBox.warning(self, "❌ Inválida", "La licencia no es válida o ha expirado.")
-        except Exception as e:
-            print(f"Error en validar_licencia: {e}")
-            QMessageBox.warning(self, "Error", "Error al validar la licencia")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

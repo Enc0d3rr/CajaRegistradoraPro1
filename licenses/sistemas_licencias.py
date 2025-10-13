@@ -653,14 +653,17 @@ if __name__ == "__main__":
     print("📦 Características implementadas:")
     print("   • VINCULACIÓN POR EQUIPO: Licencias no transferibles")
     print("   • HMAC-SHA512 para hashes seguros")
-    print("   • Encriptación AES-256 para datos sensibles") 
+    print("   • Encriptación AES-256 para datos sensibles")
     print("   • Validación multi-capa")
     print("   • Checksums SHA3-512 para integridad\n")
     
     sistema = SistemaLicencias()
     
     print("🧪 Probando generador de licencias avanzadas...")
-    test_licencia, test_archivo = sistema.generador.generar_y_guardar_automatico("TEST-SISTEMA-ADV", 1, "TEST-SISTEMA-ADV")
+    
+    # ✅ CORREGIDO: Usar el método correcto
+    test_licencia, test_archivo = sistema.generador.generar_licencia_personalizada("TEST-SISTEMA-ADV", 1, "TEST-SISTEMA-ADV")
+    
     if test_archivo and os.path.exists(test_archivo):
         print("✅ Generador de licencias avanzadas funcionando correctamente")
         
@@ -678,4 +681,5 @@ if __name__ == "__main__":
     else:
         print("❌ Problema con el generador de licencias avanzadas")
     
+    # Ejecutar el menú principal
     menu_principal()

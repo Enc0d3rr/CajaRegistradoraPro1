@@ -143,15 +143,20 @@ class DialogoActivacion(QDialog):
 
     def crear_seccion_activacion(self):
         group = QGroupBox("🔑 ACTIVAR LICENCIA")
-        
+    
         layout = QVBoxLayout()
         
-        instrucciones = QLabel(
-            "Seleccione el archivo de licencia (.json) que recibió.\n"
-            "🔒 <b>Nueva seguridad:</b> La licencia está vinculada a SU EQUIPO y no puede transferirse."
+        # ✅ TEXTO PLANO - SIN PROBLEMAS DE HTML
+        instrucciones = QLabel()
+        instrucciones.setText(
+            "Seleccione el archivo de licencia (.json) que recibió.\n\n"
+            "🔒 NUEVA SEGURIDAD:\n"
+            "• La licencia está VINCULADA a su equipo\n" 
+            "• No se puede transferir a otros equipos\n"
+            "• Mayor protección contra uso no autorizado"
         )
         instrucciones.setWordWrap(True)
-        instrucciones.setStyleSheet("color: #7f8c8d; font-style: italic;")
+        instrucciones.setStyleSheet("color: #7f8c8d; font-style: italic; line-height: 1.4;")
         layout.addWidget(instrucciones)
         
         # Campo para archivo de licencia
@@ -759,24 +764,44 @@ class DialogoActivacion(QDialog):
         return self.estado_group
 
     def actualizar_estado(self):
+        """Actualiza el estado de la licencia - VERSIÓN CORREGIDA"""
         try:
             info = self.licencias_manager.obtener_info_licencia()
             colores = self.obtener_colores_tema()
+            
+            fondo = ""
+            texto = ""
+            borde = ""
             
             if info['tipo'] == 'premium':
                 fondo = colores['exito'] if self.tema == 'oscuro' else '#d5eddb'
                 texto = '#ffffff' if self.tema == 'oscuro' else '#155724'
                 borde = self.oscurecer_color(colores['exito'])
                 
+                # Determinar tipo de plan
+                plan = info.get('plan', 'premium')
+                if plan == "perpetua":
+                    mensaje_plan = "💎 LICENCIA PERPETUA"
+                    dias_info = "• Sin expiración"
+                elif plan == "anual":
+                    mensaje_plan = "📅 SUSCRIPCIÓN ANUAL" 
+                    dias_info = f"• Días restantes: <b>{info['dias_restantes']}</b>"
+                elif plan == "empresarial":
+                    mensaje_plan = "🏢 PLAN EMPRESARIAL"
+                    dias_info = "• Sin expiración + Soporte premium"
+                else:
+                    mensaje_plan = "💎 LICENCIA PREMIUM"
+                    dias_info = f"• Días restantes: <b>{info['dias_restantes']}</b>"
+                
                 mensaje = f"""
                 <div style='background: {fondo}; padding: 15px; border-radius: 5px; color: {texto};'>
-                <b>💎 LICENCIA PREMIUM ACTIVA</b><br><br>
+                <b>{mensaje_plan} ACTIVA</b><br><br>
                 • Estado: <b>{info['estado']}</b><br>
-                • Días restantes: <b>{info['dias_restantes']}</b><br>
+                {dias_info}<br>
                 • Expira: <b>{info['expiracion']}</b><br>
                 • Equipo ID: <b>{self.licencias_manager.equipo_id[:16]}...</b><br>
                 • Código: <b>{info['codigo']}</b><br><br>
-                <i>¡Disfrute de todas las funciones premium con seguridad avanzada!</i>
+                <i>¡Disfrute de todas las funciones premium!</i>
                 </div>
                 """
             else:
@@ -791,8 +816,8 @@ class DialogoActivacion(QDialog):
                     • Estado: <b>{info['estado']}</b><br>
                     • Ventas restantes: <b>{info['dias_restantes']}</b><br>
                     • Equipo ID: <b>{self.licencias_manager.equipo_id[:16]}...</b><br>
-                    • Límite total: <b>{getattr(self.licencias_manager, 'limite_ventas_demo', 5)} ventas</b><br><br>
-                    <i>Active una licencia premium para uso ilimitado con seguridad avanzada</i>
+                    • Límite total: <b>{getattr(self.licencias_manager, 'limite_ventas_demo', 50)} ventas</b><br><br>
+                    <i>Active una licencia premium para uso ilimitado</i>
                     </div>
                     """
                 else:
@@ -806,8 +831,8 @@ class DialogoActivacion(QDialog):
                     • Estado: <b>{info['estado']}</b><br>
                     • Ventas realizadas: <b>{getattr(self.licencias_manager, 'config_demo', {}).get('ventas_realizadas', 0)}</b><br>
                     • Equipo ID: <b>{self.licencias_manager.equipo_id[:16]}...</b><br>
-                    • Límite: <b>{getattr(self.licencias_manager, 'limite_ventas_demo', 5)} ventas</b><br><br>
-                    <i>Para continuar, active una licencia premium con seguridad avanzada</i>
+                    • Límite: <b>{getattr(self.licencias_manager, 'limite_ventas_demo', 50)} ventas</b><br><br>
+                    <i>Para continuar, active una licencia premium</i>
                     </div>
                     """
             
@@ -815,7 +840,16 @@ class DialogoActivacion(QDialog):
             self.estado_group.setStyleSheet(f"QGroupBox {{ border: 2px solid {borde}; }}")
             
         except Exception as e:
-            self.label_estado.setText(f"Error cargando estado: {str(e)}")
+            error_msg = f"""
+            <div style='background: #f8d7da; padding: 15px; border-radius: 5px; color: #721c24;'>
+            <b>❌ ERROR CARGANDO ESTADO</b><br><br>
+            No se pudo cargar la información de la licencia.<br>
+            Error: {str(e)}<br><br>
+            <i>Reinicie la aplicación o contacte a soporte.</i>
+            </div>
+            """
+            self.label_estado.setText(error_msg)
+            self.estado_group.setStyleSheet("QGroupBox { border: 2px solid #e74c3c; }")
 
     def oscurecer_color(self, color_hex, porcentaje=20):
         color = QColor(color_hex)
