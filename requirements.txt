@@ -1,0 +1,8 @@
+cryptography==46.0.2
+matplotlib==3.10.6
+numpy==2.3.3
+Pillow==11.3.0
+PyQt6==6.9.1
+pyqt6_sip==13.10.2
+reportlab==4.4.3
+setuptools==66.1.1

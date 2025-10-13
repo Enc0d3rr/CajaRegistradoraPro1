@@ -1,0 +1,13 @@
+{
+    "codigo": "TEST-164919",
+    "fecha_activacion": "2025-10-08T16:49:19.270137",
+    "duracion_dias": 7,
+    "id_cliente": "TEST",
+    "tipo": "personalizada",
+    "version": "2.1",
+    "fecha_generacion": "2025-10-08T16:49:19.270153",
+    "equipo_id": "9705a3989821af628bead35a8a112467",
+    "hash_seguro": "b727ec258b2a05960a0cc84e492320d7fa5380431c76ebdeff4b8d828b1f0f5281d6a1e07379ff407714a9e5e109b098bffc09cbcaf9b1b6209999bc46e0884d",
+    "datos_encriptados": "gAAAAABo5upvjOz8iNWwomXD2bSmL9FwqbYTcLdLznobDI6-Mz7IOLrHyWjDh6Kxj23WAQN1rUCe0NeUV3vPNJv9JBtDvpjrbusgJCk6lqIROvyjUtB0j6JUPZHeDE0vKxilkVY297pnXy4ir9dE-5lsZ1eO-i_Rmg0kRrCtN9WWiEp-Fe6Ab1pTYoBwX-A3zE96XQ3v7u2xzggWqqtqLze3ij8hmn8fayhMY-9kSqXe0o5IlUcwXVavXNCHK2yRdlIHMoD2E2XhxjfQj0zI0lIt5whfao981Q==",
+    "checksum": "2444acddc5fde517d5b91f828a268138bccd7ae5b78e8d682d4f958ad5dbe61710807d803a65326513a0db40cc5a87d6edcdb51e1cf1bcad923150e0c8043e46"
+}
