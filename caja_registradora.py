@@ -28,6 +28,7 @@ from themes import obtener_tema
 from utils.helpers import formato_moneda_mx
 from licenses.licencias_manager import LicenseManager
 from licenses.dialogo_activacion import DialogoActivacion
+from email_sender import EmailSender
 
 # Agregar el directorio licenses al path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -83,6 +84,9 @@ class CajaGUI(QWidget):
         # Inicializar interfaz
         self.init_ui()
         self.aplicar_tema()
+
+        # AGREGAR SISTEMA DE EMAIL
+        self.email_sender = EmailSender()
 
     def inicializar_configuracion_por_defecto(self):
         """Crea configuración por defecto si no existe"""
@@ -707,7 +711,7 @@ class CajaGUI(QWidget):
         QMessageBox.information(self, "Venta cancelada", "Carrito vacío.")
 
     def finalizar_venta(self):
-        # VERIFICAR LICENCIA DEMO
+        # VERIFICAR LICENCIA DEMO (código existente)
         if self.license_manager.tipo_licencia == "demo":
             ventas_realizadas = self.license_manager.config_demo["ventas_realizadas"]
             if ventas_realizadas >= self.license_manager.limite_ventas_demo:
@@ -718,10 +722,44 @@ class CajaGUI(QWidget):
                     "💎 Para continuar vendiendo, active una licencia premium."
                 )
                 return
-            
+                
         if not self.carrito:
             QMessageBox.warning(self, "Error", "No hay productos en el carrito.")
             return
+        
+        # NUEVA VALIDACIÓN: VERIFICAR PRODUCTOS ACTUALIZADOS
+        productos_problema = []
+        with self.db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            for item in self.carrito:
+                cursor.execute("""
+                    SELECT nombre, precio, stock, activo 
+                    FROM productos 
+                    WHERE codigo = ? AND activo = 1
+                """, (item['codigo'],))
+                resultado = cursor.fetchone()
+                
+                if not resultado:
+                    productos_problema.append(f"{item['codigo']} - Producto no encontrado o desactivado")
+                else:
+                    nombre_actual, precio_actual, stock_actual, activo = resultado
+                    # ACTUALIZAR DATOS EN TIEMPO REAL
+                    if nombre_actual != item['nombre']:
+                        productos_problema.append(f"{item['codigo']} - Producto actualizado: {item['nombre']} → {nombre_actual}")
+                        item['nombre'] = nombre_actual  # Actualizar en carrito
+                    
+                    if precio_actual != item['precio']:
+                        item['precio'] = precio_actual  # Actualizar precio
+                    
+                    if stock_actual < item['cantidad']:
+                        productos_problema.append(f"{item['codigo']} - Stock insuficiente: {stock_actual} disponible, {item['cantidad']} solicitado")
+        
+        if productos_problema:
+            QMessageBox.warning(self, "Productos Actualizados", 
+                            "Se actualizaron algunos productos:\n\n" + 
+                            "\n".join(productos_problema) +
+                            "\n\n¿Desea continuar con la venta?",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
         iva = self.config.get("iva", 0.18)
         total = self.calcular_total() * (1 + iva)
@@ -783,6 +821,34 @@ class CajaGUI(QWidget):
                 QMessageBox.information(self, "Información", "La aplicación se cerrará.")
                 self.close()
                 return
+            
+        # OFRECER ENVÍO POR EMAIL
+        if self.email_sender.config["habilitado"]:
+            respuesta = QMessageBox.question(
+                self,
+                "Envío de Ticket",
+                "¿Desea enviar el ticket por correo electrónico al cliente?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if respuesta == QMessageBox.StandardButton.Yes:
+                email_cliente, ok = QInputDialog.getText(
+                    self, 
+                    "Email del Cliente",
+                    "Ingrese el email del cliente:",
+                    text=""
+                )
+                
+                if ok and email_cliente.strip():
+                    resultado, mensaje = self.email_sender.enviar_ticket(
+                        ticket_path, 
+                        email_cliente.strip(),
+                        venta_id,
+                        total,
+                        self.config.get("nombre_negocio", "")
+                    )
+                    
+                    QMessageBox.information(self, "Envío de Ticket", mensaje)
 
     def actualizar_resumen_ventas_hoy(self):
         """Actualiza el resumen de ventas del día actual"""

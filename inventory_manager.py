@@ -354,40 +354,30 @@ class InventoryManagerDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo actualizar el producto: {str(e)}")
     
-    def eliminar_producto(self):
-        selected = self.get_selected_product()
-        if not selected:
-            QMessageBox.warning(self, "Error", "Seleccione un producto para eliminar")
-            return
-        
-        product_id, codigo, nombre = selected
-        
-        respuesta = QMessageBox.question(
-            self, "Confirmar", 
-            f"¿Está seguro de que quiere eliminar el producto '{nombre}'?\n\n"
-            f"El código '{codigo}' quedará disponible para nuevos productos."
-        )
-        
-        if respuesta == QMessageBox.StandardButton.Yes:
-            try:
-                with self.db_manager.get_connection() as conn:
-                    cursor = conn.cursor()
-                    # ✅ SOLO marcar como inactivo - el código se mantiene igual
-                    cursor.execute(
-                        "UPDATE productos SET activo = 0 WHERE id = ?", 
-                        (product_id,)
-                    )
+    def eliminar_producto(self, producto_id):
+        """Eliminar/Desactivar producto - VERSIÓN MEJORADA"""
+        try:
+            with self.db_manager.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # ✅ VERIFICAR SI EL PRODUCTO TIENE VENTAS HISTÓRICAS
+                cursor.execute("SELECT COUNT(*) FROM detalle_ventas WHERE producto_id = ?", (producto_id,))
+                tiene_ventas = cursor.fetchone()[0] > 0
+                
+                if tiene_ventas:
+                    # ✅ SOLO DESACTIVAR (no eliminar) para mantener consistencia
+                    cursor.execute("UPDATE productos SET activo = 0 WHERE id = ?", (producto_id,))
                     conn.commit()
-
-                QMessageBox.information(
-                    self, "Éxito", 
-                    f"Producto '{nombre}' eliminado correctamente.\n"
-                    f"✅ El código '{codigo}' está ahora disponible para nuevos productos."
-                )
-                self.cargar_productos()
-            
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"No se pudo eliminar el producto: {str(e)}")
+                    return True, "Producto desactivado (mantiene historial)"
+                else:
+                    # ✅ ELIMINAR COMPLETAMENTE solo si no tiene ventas
+                    cursor.execute("DELETE FROM productos WHERE id = ?", (producto_id,))
+                    conn.commit()
+                    return True, "Producto eliminado"
+                    
+        except Exception as e:
+            print(f"❌ Error eliminando producto: {e}")
+            return False, f"Error: {str(e)}"
 
     def mostrar_codigos_disponibles(self):
         """Muestra todos los códigos (activos e inactivos) para ayudar al usuario"""

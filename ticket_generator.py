@@ -26,11 +26,51 @@ def ensure_directory_exists(directory_path):
         print(f"✅ Carpeta creada: {directory_path}")
     return directory_path
 
+def actualizar_datos_carrito(carrito, db_manager):
+    """Actualiza los datos del carrito con información actual de la BD"""
+    try:
+        carrito_actualizado = []
+        with db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            for item in carrito:
+                cursor.execute("""
+                    SELECT nombre, precio 
+                    FROM productos 
+                    WHERE codigo = ? AND activo = 1
+                """, (item['codigo'],))
+                resultado = cursor.fetchone()
+                
+                if resultado:
+                    # USAR DATOS ACTUALES de la base de datos
+                    item_actualizado = item.copy()
+                    item_actualizado['nombre'] = resultado[0]
+                    item_actualizado['precio'] = resultado[1]
+                    carrito_actualizado.append(item_actualizado)
+                else:
+                    # MANTENER DATOS ORIGINALES pero marcar como no disponible
+                    item_actualizado = item.copy()
+                    item_actualizado['nombre'] = f"{item['nombre']} [NO DISPONIBLE]"
+                    carrito_actualizado.append(item_actualizado)
+        
+        return carrito_actualizado
+    except Exception as e:
+        print(f"❌ Error actualizando carrito: {e}")
+        return carrito  # Devolver carrito original si hay error
+
 def generar_ticket(carrito, iva, total=None, metodo_pago="Efectivo", nombre_negocio=None, numero_venta=None):
     """
     Genera un ticket de texto bien alineado y centrado y lo guarda dentro de la carpeta 'tickets/'.
     Devuelve la ruta completa del archivo generado.
     """
+    # ACTUALIZAR CARRITO CON DATOS RECIENTES DE LA BD
+    try:
+        import database
+        db_manager = database.DatabaseManager()
+        carrito_actual = actualizar_datos_carrito(carrito, db_manager)
+    except Exception as e:
+        print(f"⚠️ No se pudieron actualizar datos del carrito: {e}")
+        carrito_actual = carrito  # Usar carrito original como fallback
+
     # Obtener directorio base de la aplicación (funciona compilado y desarrollo)
     base_dir = get_app_directory()
 
@@ -57,8 +97,8 @@ def generar_ticket(carrito, iva, total=None, metodo_pago="Efectivo", nombre_nego
         nombre_archivo = f"ticket_{numero_venta:06d}_{timestamp}.txt"
     ruta_archivo = os.path.join(tickets_dir, nombre_archivo)
 
-    # Cálculos
-    subtotal = sum(item['precio'] * item['cantidad'] for item in carrito)
+    # Cálculos - USAR carrito_actual en lugar de carrito
+    subtotal = sum(item['precio'] * item['cantidad'] for item in carrito_actual)
 
     # detectar si 'iva' es tasa o monto
     if iva is None:
@@ -79,8 +119,8 @@ def generar_ticket(carrito, iva, total=None, metodo_pago="Efectivo", nombre_nego
 
     total_calc = total if (total is not None) else (subtotal + iva_amount)
 
-    # calcular anchos de columna
-    nombres = [item['nombre'] for item in carrito] if carrito else []
+    # calcular anchos de columna - USAR carrito_actual
+    nombres = [item['nombre'] for item in carrito_actual] if carrito_actual else []
     max_name = max([len(n) for n in nombres] + [len("Producto")]) if nombres else len("Producto")
     name_w = min(max(max_name, len("Producto")), 30)   # limitar a 30 chars
     qty_w = max(6, len("Cant."))
@@ -109,8 +149,8 @@ def generar_ticket(carrito, iva, total=None, metodo_pago="Efectivo", nombre_nego
         f.write(header + "\n")
         f.write(sep_dash + "\n")
 
-        # ✅ CORREGIDO - filas de productos (SOLO el bucle, sin código fuera)
-        for item in carrito:
+        # CORREGIDO - filas de productos (USANDO carrito_actual)
+        for item in carrito_actual:
             nombre = item['nombre'][:name_w]  # truncar si demasiado largo
             cantidad = int(item['cantidad'])
             precio = float(item['precio'])

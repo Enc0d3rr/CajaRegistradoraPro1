@@ -48,6 +48,9 @@ class ConfigPanelDialog(QDialog):
         tabs.addTab(self.crear_pestaña_general(), "🏢 General")
         tabs.addTab(self.crear_pestaña_apariencia(), "🎨 Apariencia")
         tabs.addTab(self.crear_pestaña_usuarios(), "👥 Usuarios")
+
+        # Enviar ticket por email
+        layout.addWidget(self.crear_seccion_email())
         
         layout.addWidget(tabs)
         layout.addLayout(self.crear_botones_accion())
@@ -455,6 +458,136 @@ class ConfigPanelDialog(QDialog):
                 "Error", 
                 f"No se pudo cargar el logo:\n{str(e)}"
             )
+
+    def crear_seccion_email(self):
+        """Crear sección de configuración de email"""
+        group = QGroupBox("📧 Configuración de Email (Para envío de tickets)")
+        layout = QVBoxLayout()
+        
+        # Información importante
+        info_label = QLabel(
+            "Configure su email para enviar tickets a clientes.\n"
+            "Para Gmail: Use 'Contraseña de aplicación' (no la contraseña normal)."
+        )
+        info_label.setStyleSheet("color: #7f8c8d; font-style: italic; padding: 5px;")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # Servidor SMTP
+        server_layout = QHBoxLayout()
+        server_layout.addWidget(QLabel("Servidor SMTP:"))
+        self.smtp_server = QLineEdit()
+        self.smtp_server.setText(self.config.get("smtp_server", "smtp.gmail.com"))
+        self.smtp_server.setPlaceholderText("smtp.gmail.com")
+        server_layout.addWidget(self.smtp_server)
+        layout.addLayout(server_layout)
+        
+        # Puerto
+        port_layout = QHBoxLayout()
+        port_layout.addWidget(QLabel("Puerto:"))
+        self.smtp_port = QLineEdit()
+        self.smtp_port.setText(str(self.config.get("smtp_port", "587")))
+        self.smtp_port.setPlaceholderText("587")
+        port_layout.addWidget(self.smtp_port)
+        layout.addLayout(port_layout)
+        
+        # Email
+        email_layout = QHBoxLayout()
+        email_layout.addWidget(QLabel("Email:"))
+        self.email_address = QLineEdit()
+        self.email_address.setText(self.config.get("email", ""))
+        self.email_address.setPlaceholderText("tu-email@gmail.com")
+        email_layout.addWidget(self.email_address)
+        layout.addLayout(email_layout)
+        
+        # Contraseña
+        password_layout = QHBoxLayout()
+        password_layout.addWidget(QLabel("Contraseña:"))
+        self.email_password = QLineEdit()
+        self.email_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.email_password.setText(self.config.get("email_password", ""))
+        self.email_password.setPlaceholderText("Contraseña de aplicación")
+        password_layout.addWidget(self.email_password)
+        layout.addLayout(password_layout)
+        
+        # Botones de email
+        button_layout = QHBoxLayout()
+        
+        btn_guardar_email = QPushButton("💾 Guardar Email")
+        btn_guardar_email.clicked.connect(self.guardar_config_email)
+        button_layout.addWidget(btn_guardar_email)
+        
+        btn_probar = QPushButton("🔍 Probar Conexión")
+        btn_probar.clicked.connect(self.probar_conexion_email)
+        button_layout.addWidget(btn_probar)
+        
+        layout.addLayout(button_layout)
+        
+        group.setLayout(layout)
+        return group
+
+    def guardar_config_email(self):
+        """Guardar configuración de email"""
+        try:
+            # Validar campos
+            if not self.email_address.text().strip():
+                QMessageBox.warning(self, "Error", "El email es obligatorio")
+                return
+                
+            if not self.email_password.text():
+                QMessageBox.warning(self, "Error", "La contraseña es obligatoria")
+                return
+            
+            # Guardar en configuración
+            self.config.update({
+                "smtp_server": self.smtp_server.text().strip(),
+                "smtp_port": int(self.smtp_port.text() or 587),
+                "email": self.email_address.text().strip(),
+                "email_password": self.email_password.text()
+            })
+            
+            # Guardar en el sistema de email
+            from email_sender import EmailSender
+            email_sender = EmailSender()
+            
+            resultado, mensaje = email_sender.configurar_email(
+                self.config["email"],
+                self.config["email_password"],
+                self.config["smtp_server"],
+                self.config["smtp_port"]
+            )
+            
+            if resultado:
+                QMessageBox.information(self, "✅ Éxito", 
+                                    "Configuración de email guardada correctamente\n\n" +
+                                    "Ahora puede enviar tickets por correo a sus clientes.")
+            else:
+                QMessageBox.warning(self, "⚠️ Advertencia", 
+                                f"Configuración guardada pero: {mensaje}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "❌ Error", f"Error guardando configuración: {str(e)}")
+
+    def probar_conexion_email(self):
+        """Probar conexión de email"""
+        try:
+            from email_sender import EmailSender
+            email_sender = EmailSender()
+            
+            # Configurar temporalmente con los datos actuales
+            if self.email_address.text().strip() and self.email_password.text():
+                email_sender.configurar_email(
+                    self.email_address.text().strip(),
+                    self.email_password.text(),
+                    self.smtp_server.text().strip(),
+                    int(self.smtp_port.text() or 587)
+                )
+            
+            resultado, mensaje = email_sender.probar_conexion()
+            QMessageBox.information(self, "Prueba de Conexión", mensaje)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error probando conexión: {str(e)}")
 
     def guardar_configuracion(self):
         """Guardar configuración"""
