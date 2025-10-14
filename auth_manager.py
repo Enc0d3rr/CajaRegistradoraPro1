@@ -1,5 +1,6 @@
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
 from PyQt6.QtGui import QPalette, QColor
+from PyQt6.QtCore import Qt  
 
 class LoginDialog(QDialog):
     def __init__(self, db_manager):
@@ -7,6 +8,9 @@ class LoginDialog(QDialog):
         self.db_manager = db_manager
         self.setWindowTitle("Iniciar Sesión")
         self.setGeometry(400, 300, 300, 200)
+        
+        # LÍNEA PARA EL BOTÓN CERRAR (X)
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowCloseButtonHint)
         
         # Estilo de la ventana de login
         palette = self.palette()

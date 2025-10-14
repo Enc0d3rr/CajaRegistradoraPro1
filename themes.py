@@ -125,6 +125,40 @@ def obtener_tema_claro():
         border-radius: 6px;
         padding: 10px;
     }
+    
+    /* ====== CORRECCIONES PARA SELECCIONES ====== */
+    QListWidget::item:selected,
+    QTableWidget::item:selected {
+        background-color: #007bff;
+        color: #ffffff;
+        border: 1px solid #0056b3;
+        font-weight: bold;
+    }
+    
+    QListWidget::item:focus,
+    QTableWidget::item:focus {
+        background-color: #007bff;
+        color: #ffffff;
+        border: 1px solid #0056b3;
+        font-weight: bold;
+    }
+    
+    QListWidget::item:hover,
+    QTableWidget::item:hover {
+        background-color: #e9ecef;
+        color: #212529;
+        border: 1px solid #dee2e6;
+    }
+    
+    QTableWidget::item:selected {
+        background-color: #007bff;
+        color: #ffffff;
+    }
+    
+    QListWidget::item:selected {
+        background-color: #007bff;
+        color: #ffffff;
+    }
     """
 
 def obtener_tema_oscuro():
@@ -253,6 +287,40 @@ def obtener_tema_oscuro():
         border: 2px solid #ff6b6b;
         border-radius: 6px;
         padding: 10px;
+    }
+    
+    /* ====== CORRECCIONES PARA SELECCIONES ====== */
+    QListWidget::item:selected,
+    QTableWidget::item:selected {
+        background-color: #0d6efd;
+        color: #ffffff;
+        border: 1px solid #0b5ed7;
+        font-weight: bold;
+    }
+    
+    QListWidget::item:focus,
+    QTableWidget::item:focus {
+        background-color: #0d6efd;
+        color: #ffffff;
+        border: 1px solid #0b5ed7;
+        font-weight: bold;
+    }
+    
+    QListWidget::item:hover,
+    QTableWidget::item:hover {
+        background-color: #3d4249;
+        color: #e9ecef;
+        border: 1px solid #495057;
+    }
+    
+    QTableWidget::item:selected {
+        background-color: #0d6efd;
+        color: #ffffff;
+    }
+    
+    QListWidget::item:selected {
+        background-color: #0d6efd;
+        color: #ffffff;
     }
     """
 

@@ -6,6 +6,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt, pyqtSignal
+
+from email_system.email_sender import EmailSender
 import os
 import sys
 
@@ -46,11 +48,9 @@ class ConfigPanelDialog(QDialog):
         # Sistema de pestañas
         tabs = QTabWidget()
         tabs.addTab(self.crear_pestaña_general(), "🏢 General")
+        tabs.addTab(self.crear_pestaña_email(), "📧 Envío de Tickets")  # NUEVA PESTAÑA
         tabs.addTab(self.crear_pestaña_apariencia(), "🎨 Apariencia")
         tabs.addTab(self.crear_pestaña_usuarios(), "👥 Usuarios")
-
-        # Enviar ticket por email
-        layout.addWidget(self.crear_seccion_email())
         
         layout.addWidget(tabs)
         layout.addLayout(self.crear_botones_accion())
@@ -109,52 +109,86 @@ class ConfigPanelDialog(QDialog):
         tab.setLayout(layout)
         return tab
 
-    def actualizar_logo(self):
-        """Actualizar visualización del logo - VERSIÓN MEJORADA"""
-        try:
-            logo_path = self.config.get('logo_path', '')
-            
-            if not logo_path:
-                self.mostrar_logo_por_defecto()
-                return
-                
-            full_logo_path = os.path.join('data', logo_path)
-            
-            if os.path.exists(full_logo_path):
-                pixmap = QPixmap(full_logo_path)
-                if not pixmap.isNull():
-                    # Redimensionar manteniendo aspecto
-                    pixmap_redimensionada = pixmap.scaled(
-                        100, 100, 
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation
-                    )
-                    self.logo_label.setPixmap(pixmap_redimensionada)
-                    print(f"✅ Logo cargado: {logo_path}")
-                    return
-                else:
-                    print(f"❌ No se pudo cargar el logo: {logo_path}")
-            
-            # Si llegamos aquí, hay un problema con el logo
-            self.mostrar_logo_por_defecto()
-            
-        except Exception as e:
-            print(f"❌ Error actualizando logo: {e}")
-            self.mostrar_logo_por_defecto()
-
-    def mostrar_logo_por_defecto(self):
-        """Mostrar estado por defecto cuando no hay logo"""
-        nombre_negocio = self.config.get('nombre_negocio', 'Mi Negocio')
-        self.logo_label.setText(f"🏪\n{nombre_negocio[:15]}...")
-        self.logo_label.setStyleSheet("""
-            color: #7f8c8d; 
-            font-style: italic; 
-            font-weight: bold;
-            font-size: 10px;
-            text-align: center;
-            border: 1px dashed #bdc3c7;
-            padding: 5px;
-        """)
+    def crear_pestaña_email(self):
+        """Crear pestaña de configuración de email - VERSIÓN CORREGIDA"""
+        tab = QWidget()
+        layout = QVBoxLayout()
+        
+        email_sender = EmailSender()
+        
+        # Grupo de configuración de email
+        group = QGroupBox("📧 Configuración de Email (Para envío de tickets)")
+        email_layout = QVBoxLayout()
+        
+        # Información importante
+        info_label = QLabel(
+            "Configure su email para enviar tickets a clientes.\n"
+            "Para Gmail: Use 'Contraseña de aplicación' (no la contraseña normal)."
+        )
+        info_label.setStyleSheet("color: #7f8c8d; font-style: italic; padding: 5px;")
+        info_label.setWordWrap(True)
+        email_layout.addWidget(info_label)
+        
+        # Servidor SMTP
+        server_layout = QHBoxLayout()
+        server_layout.addWidget(QLabel("Servidor SMTP:"))
+        self.smtp_server = QLineEdit()
+        # ✅ CARGAR DESDE email_sender, NO desde self.config
+        self.smtp_server.setText(email_sender.config.get("smtp_server", "smtp.gmail.com"))
+        self.smtp_server.setPlaceholderText("smtp.gmail.com")
+        server_layout.addWidget(self.smtp_server)
+        email_layout.addLayout(server_layout)
+        
+        # Puerto
+        port_layout = QHBoxLayout()
+        port_layout.addWidget(QLabel("Puerto:"))
+        self.smtp_port = QLineEdit()
+        # ✅ CARGAR DESDE email_sender
+        self.smtp_port.setText(str(email_sender.config.get("smtp_port", "587")))
+        self.smtp_port.setPlaceholderText("587")
+        port_layout.addWidget(self.smtp_port)
+        email_layout.addLayout(port_layout)
+        
+        # Email
+        email_layout_email = QHBoxLayout()
+        email_layout_email.addWidget(QLabel("Email:"))
+        self.email_address = QLineEdit()
+        # ✅ CARGAR DESDE email_sender
+        self.email_address.setText(email_sender.config.get("email", ""))
+        self.email_address.setPlaceholderText("tu-email@gmail.com")
+        email_layout_email.addWidget(self.email_address)
+        email_layout.addLayout(email_layout_email)
+        
+        # Contraseña
+        password_layout = QHBoxLayout()
+        password_layout.addWidget(QLabel("Contraseña:"))
+        self.email_password = QLineEdit()
+        self.email_password.setEchoMode(QLineEdit.EchoMode.Password)
+        # ✅ CARGAR DESDE email_sender
+        self.email_password.setText(email_sender.config.get("password", ""))
+        self.email_password.setPlaceholderText("Contraseña de aplicación")
+        password_layout.addWidget(self.email_password)
+        email_layout.addLayout(password_layout)
+        
+        # Botones de email
+        button_layout = QHBoxLayout()
+        
+        btn_guardar_email = QPushButton("💾 Guardar Email")
+        btn_guardar_email.clicked.connect(self.guardar_config_email)
+        button_layout.addWidget(btn_guardar_email)
+        
+        btn_probar = QPushButton("🔍 Probar Conexión")
+        btn_probar.clicked.connect(self.probar_conexion_email)
+        button_layout.addWidget(btn_probar)
+        
+        email_layout.addLayout(button_layout)
+        
+        group.setLayout(email_layout)
+        layout.addWidget(group)
+        layout.addStretch()
+        
+        tab.setLayout(layout)
+        return tab
 
     def crear_pestaña_apariencia(self):
         """Crear pestaña de apariencia"""
@@ -197,6 +231,10 @@ class ConfigPanelDialog(QDialog):
         tema_actual = self.config.get('tema', 'claro')
         self.radio_oscuro.setChecked(tema_actual == 'oscuro')
         self.radio_claro.setChecked(tema_actual == 'claro')
+
+        # Conectar cambios para previsualización en tiempo real
+        self.radio_claro.toggled.connect(self.actualizar_preview_tema)
+        self.radio_oscuro.toggled.connect(self.actualizar_preview_tema)
         
         group_tema.setLayout(layout_tema)
         layout.addWidget(group_tema)
@@ -212,37 +250,12 @@ class ConfigPanelDialog(QDialog):
         group_prev.setLayout(layout_prev)
         layout.addWidget(group_prev)
         layout.addStretch()
+
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self.actualizar_preview_tema)
         
         tab.setLayout(layout)
         return tab
-
-    def actualizar_preview_tema(self):
-        """Actualizar previsualización del tema"""
-        tema_actual = 'oscuro' if self.radio_oscuro.isChecked() else 'claro'
-        
-        if tema_actual == 'oscuro':
-            texto = "🌙 Tema Oscuro: Fondos oscuros, textos claros"
-            estilo = """
-                background-color: #2d3239; 
-                color: #e9ecef; 
-                padding: 15px; 
-                border-radius: 8px;
-                font-weight: bold;
-                border: 2px solid #495057;
-            """
-        else:
-            texto = "🌞 Tema Claro: Fondos claros, textos oscuros"
-            estilo = """
-                background-color: #f8f9fa; 
-                color: #212529; 
-                padding: 15px; 
-                border-radius: 8px;
-                font-weight: bold;
-                border: 2px solid #dee2e6;
-            """
-        
-        self.preview_label.setText(texto)
-        self.preview_label.setStyleSheet(estilo)
 
     def crear_pestaña_usuarios(self):
         """Crear pestaña de gestión de usuarios"""
@@ -459,103 +472,140 @@ class ConfigPanelDialog(QDialog):
                 f"No se pudo cargar el logo:\n{str(e)}"
             )
 
-    def crear_seccion_email(self):
-        """Crear sección de configuración de email"""
-        group = QGroupBox("📧 Configuración de Email (Para envío de tickets)")
-        layout = QVBoxLayout()
-        
-        # Información importante
-        info_label = QLabel(
-            "Configure su email para enviar tickets a clientes.\n"
-            "Para Gmail: Use 'Contraseña de aplicación' (no la contraseña normal)."
-        )
-        info_label.setStyleSheet("color: #7f8c8d; font-style: italic; padding: 5px;")
-        info_label.setWordWrap(True)
-        layout.addWidget(info_label)
-        
-        # Servidor SMTP
-        server_layout = QHBoxLayout()
-        server_layout.addWidget(QLabel("Servidor SMTP:"))
-        self.smtp_server = QLineEdit()
-        self.smtp_server.setText(self.config.get("smtp_server", "smtp.gmail.com"))
-        self.smtp_server.setPlaceholderText("smtp.gmail.com")
-        server_layout.addWidget(self.smtp_server)
-        layout.addLayout(server_layout)
-        
-        # Puerto
-        port_layout = QHBoxLayout()
-        port_layout.addWidget(QLabel("Puerto:"))
-        self.smtp_port = QLineEdit()
-        self.smtp_port.setText(str(self.config.get("smtp_port", "587")))
-        self.smtp_port.setPlaceholderText("587")
-        port_layout.addWidget(self.smtp_port)
-        layout.addLayout(port_layout)
-        
-        # Email
-        email_layout = QHBoxLayout()
-        email_layout.addWidget(QLabel("Email:"))
-        self.email_address = QLineEdit()
-        self.email_address.setText(self.config.get("email", ""))
-        self.email_address.setPlaceholderText("tu-email@gmail.com")
-        email_layout.addWidget(self.email_address)
-        layout.addLayout(email_layout)
-        
-        # Contraseña
-        password_layout = QHBoxLayout()
-        password_layout.addWidget(QLabel("Contraseña:"))
-        self.email_password = QLineEdit()
-        self.email_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.email_password.setText(self.config.get("email_password", ""))
-        self.email_password.setPlaceholderText("Contraseña de aplicación")
-        password_layout.addWidget(self.email_password)
-        layout.addLayout(password_layout)
-        
-        # Botones de email
-        button_layout = QHBoxLayout()
-        
-        btn_guardar_email = QPushButton("💾 Guardar Email")
-        btn_guardar_email.clicked.connect(self.guardar_config_email)
-        button_layout.addWidget(btn_guardar_email)
-        
-        btn_probar = QPushButton("🔍 Probar Conexión")
-        btn_probar.clicked.connect(self.probar_conexion_email)
-        button_layout.addWidget(btn_probar)
-        
-        layout.addLayout(button_layout)
-        
-        group.setLayout(layout)
-        return group
-
-    def guardar_config_email(self):
-        """Guardar configuración de email"""
+    def actualizar_logo(self):
+        """Actualizar visualización del logo - VERSIÓN MEJORADA"""
         try:
-            # Validar campos
-            if not self.email_address.text().strip():
-                QMessageBox.warning(self, "Error", "El email es obligatorio")
+            logo_path = self.config.get('logo_path', '')
+            
+            if not logo_path:
+                self.mostrar_logo_por_defecto()
                 return
                 
-            if not self.email_password.text():
-                QMessageBox.warning(self, "Error", "La contraseña es obligatoria")
-                return
+            full_logo_path = os.path.join('data', logo_path)
             
-            # Guardar en configuración
+            if os.path.exists(full_logo_path):
+                pixmap = QPixmap(full_logo_path)
+                if not pixmap.isNull():
+                    # Redimensionar manteniendo aspecto
+                    pixmap_redimensionada = pixmap.scaled(
+                        100, 100, 
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    self.logo_label.setPixmap(pixmap_redimensionada)
+                    print(f"✅ Logo cargado: {logo_path}")
+                    return
+                else:
+                    print(f"❌ No se pudo cargar el logo: {logo_path}")
+            
+            # Si llegamos aquí, hay un problema con el logo
+            self.mostrar_logo_por_defecto()
+            
+        except Exception as e:
+            print(f"❌ Error actualizando logo: {e}")
+            self.mostrar_logo_por_defecto()
+
+    def mostrar_logo_por_defecto(self):
+        """Mostrar estado por defecto cuando no hay logo"""
+        nombre_negocio = self.config.get('nombre_negocio', 'Mi Negocio')
+        self.logo_label.setText(f"🏪\n{nombre_negocio[:15]}...")
+        self.logo_label.setStyleSheet("""
+            color: #7f8c8d; 
+            font-style: italic; 
+            font-weight: bold;
+            font-size: 10px;
+            text-align: center;
+            border: 1px dashed #bdc3c7;
+            padding: 5px;
+        """)
+
+    def aplicar_tema_preview(self, tema):
+        """Aplicar tema SOLO para previsualización - NO afecta configuración guardada"""
+        try:
+            from themes import obtener_tema
+            estilo = obtener_tema(tema)
+            
+            # Aplicar estilo solo a los elementos visuales del panel
+            self.setStyleSheet(estilo)
+            
+            # Aplicar a widgets específicos del panel
+            widgets_a_actualizar = [
+                self.findChild(QTabWidget),
+                self.findChild(QGroupBox),
+                self.findChild(QTableWidget),
+            ]
+            
+            for widget in widgets_a_actualizar:
+                if widget:
+                    widget.setStyleSheet(estilo)
+                    
+            # Forzar actualización visual
+            self.update()
+            self.repaint()
+            
+        except Exception as e:
+            print(f"⚠️ Error en previsualización de tema: {e}")
+
+    def actualizar_preview_tema(self):
+        """Actualizar previsualización del tema - SOLO VISUAL"""
+        try:
+            tema_actual = 'oscuro' if self.radio_oscuro.isChecked() else 'claro'
+            
+            if tema_actual == 'oscuro':
+                texto = "🌙 Tema Oscuro: Fondos oscuros, textos claros"
+                estilo = """
+                    QLabel {
+                        background-color: #2d3239; 
+                        color: #e9ecef; 
+                        padding: 15px; 
+                        border-radius: 8px;
+                        font-weight: bold;
+                        border: 2px solid #495057;
+                    }
+                """
+            else:
+                texto = "🌞 Tema Claro: Fondos claros, textos oscuros"
+                estilo = """
+                    QLabel {
+                        background-color: #f8f9fa; 
+                        color: #212529; 
+                        padding: 15px; 
+                        border-radius: 8px;
+                        font-weight: bold;
+                        border: 2px solid #dee2e6;
+                    }
+                """
+            
+            self.preview_label.setText(texto)
+            self.preview_label.setStyleSheet(estilo)
+            
+            # SOLO APLICAR PREVIEW - NO GUARDAR CONFIGURACIÓN
+            self.aplicar_tema_preview(tema_actual)
+            
+        except Exception as e:
+            print(f"❌ Error actualizando preview: {e}")
+
+    def guardar_config_email(self):
+        """Guardar configuración de email - VERSIÓN CORREGIDA"""
+        try:
+            # 1. Guardar en email_sender (archivo email_config.json)
+            email_sender = EmailSender()
+            
+            resultado, mensaje = email_sender.configurar_email(
+                self.email_address.text().strip(),
+                self.email_password.text(),
+                self.smtp_server.text().strip(),
+                int(self.smtp_port.text() or 587)
+            )
+            
+            # 2. Guardar en configuración principal (config.json)
             self.config.update({
                 "smtp_server": self.smtp_server.text().strip(),
                 "smtp_port": int(self.smtp_port.text() or 587),
                 "email": self.email_address.text().strip(),
-                "email_password": self.email_password.text()
+                "email_password": self.email_password.text(),
+                "email_configurado": True  # ✅ Nueva bandera
             })
-            
-            # Guardar en el sistema de email
-            from email_sender import EmailSender
-            email_sender = EmailSender()
-            
-            resultado, mensaje = email_sender.configurar_email(
-                self.config["email"],
-                self.config["email_password"],
-                self.config["smtp_server"],
-                self.config["smtp_port"]
-            )
             
             if resultado:
                 QMessageBox.information(self, "✅ Éxito", 
@@ -571,7 +621,6 @@ class ConfigPanelDialog(QDialog):
     def probar_conexion_email(self):
         """Probar conexión de email"""
         try:
-            from email_sender import EmailSender
             email_sender = EmailSender()
             
             # Configurar temporalmente con los datos actuales
@@ -654,4 +703,4 @@ class ConfigPanelDialog(QDialog):
             'telefono': self.config.get('telefono', ''),
             'rfc': self.config.get('rfc', ''),
             'tema': tema_seleccionado  
-    }
+        }

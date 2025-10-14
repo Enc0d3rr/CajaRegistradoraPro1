@@ -4,11 +4,14 @@ from PyQt6.QtWidgets import (
     QHeaderView, QComboBox, QInputDialog, QGridLayout
 )
 from PyQt6.QtGui import QPalette, QColor
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 
 from utils.helpers import formato_moneda_mx
 
 class InventoryManagerDialog(QDialog):
+
+    productos_actualizados = pyqtSignal()
+
     def __init__(self, db_manager, parent=None):
         super().__init__(parent)
         self.db_manager = db_manager
@@ -296,6 +299,9 @@ class InventoryManagerDialog(QDialog):
 
             self.cargar_productos()
             self.limpiar_formulario()
+
+            # EMITIR SEÑAL DE ACTUALIZACIÓN
+            self.productos_actualizados.emit()
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo agregar el producto: {str(e)}")
@@ -351,26 +357,62 @@ class InventoryManagerDialog(QDialog):
             self.cargar_productos()
             self.limpiar_formulario()
             
+            # EMITIR SEÑAL DE ACTUALIZACIÓN
+            self.productos_actualizados.emit()
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo actualizar el producto: {str(e)}")
-    
-    def eliminar_producto(self, producto_id):
+
+    def eliminar_producto(self):
+        """Eliminar producto seleccionado - MÉTODO PRINCIPAL para el botón"""
+        selected = self.get_selected_product()
+        if not selected:
+            QMessageBox.warning(self, "Error", "Seleccione un producto para eliminar")
+            return
+        
+        product_id, codigo, nombre = selected
+        
+        respuesta = QMessageBox.question(
+            self, "Confirmar", 
+            f"¿Está seguro de eliminar/desactivar el producto '{nombre}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if respuesta == QMessageBox.StandardButton.Yes:
+            try:
+                # ✅ LLAMAR AL MÉTODO AUXILIAR QUE YA TIENES
+                resultado, mensaje = self.eliminar_producto_db(product_id)
+                
+                if resultado:
+                    QMessageBox.information(self, "Éxito", mensaje)
+                    self.cargar_productos()
+                    self.limpiar_formulario()
+                    
+                    # ✅ EMITIR SEÑAL DE ACTUALIZACIÓN
+                    self.productos_actualizados.emit()
+                else:
+                    QMessageBox.warning(self, "Error", mensaje)
+                    
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"No se pudo eliminar el producto: {str(e)}")
+        
+    def eliminar_producto_db(self, producto_id):
         """Eliminar/Desactivar producto - VERSIÓN MEJORADA"""
         try:
             with self.db_manager.get_connection() as conn:
                 cursor = conn.cursor()
                 
-                # ✅ VERIFICAR SI EL PRODUCTO TIENE VENTAS HISTÓRICAS
+                # VERIFICAR SI EL PRODUCTO TIENE VENTAS HISTÓRICAS
                 cursor.execute("SELECT COUNT(*) FROM detalle_ventas WHERE producto_id = ?", (producto_id,))
                 tiene_ventas = cursor.fetchone()[0] > 0
                 
                 if tiene_ventas:
-                    # ✅ SOLO DESACTIVAR (no eliminar) para mantener consistencia
+                    # SOLO DESACTIVAR (no eliminar) para mantener consistencia
                     cursor.execute("UPDATE productos SET activo = 0 WHERE id = ?", (producto_id,))
                     conn.commit()
                     return True, "Producto desactivado (mantiene historial)"
                 else:
-                    # ✅ ELIMINAR COMPLETAMENTE solo si no tiene ventas
+                    # ELIMINAR COMPLETAMENTE solo si no tiene ventas
                     cursor.execute("DELETE FROM productos WHERE id = ?", (producto_id,))
                     conn.commit()
                     return True, "Producto eliminado"
@@ -435,6 +477,9 @@ class InventoryManagerDialog(QDialog):
                 
                 QMessageBox.information(self, "Éxito", "Stock ajustado correctamente")
                 self.cargar_productos()
+
+                # EMITIR SEÑAL DE ACTUALIZACIÓN
+                self.productos_actualizados.emit()
                 
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"No se pudo ajustar el stock: {str(e)}")

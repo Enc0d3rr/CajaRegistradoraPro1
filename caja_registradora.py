@@ -28,7 +28,7 @@ from themes import obtener_tema
 from utils.helpers import formato_moneda_mx
 from licenses.licencias_manager import LicenseManager
 from licenses.dialogo_activacion import DialogoActivacion
-from email_sender import EmailSender
+from email_system.email_sender import EmailSender
 
 # Agregar el directorio licenses al path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -85,8 +85,54 @@ class CajaGUI(QWidget):
         self.init_ui()
         self.aplicar_tema()
 
+        # Configuracion del icono de la aplicacion
+        self.configurar_icono_aplicacion()
+
         # AGREGAR SISTEMA DE EMAIL
         self.email_sender = EmailSender()
+
+    def configurar_icono_aplicacion(self):
+        """Configurar el icono de la aplicación para Windows - VERSIÓN MEJORADA"""
+        try:
+            # Ruta al icono - busca en varias ubicaciones posibles
+            posibles_iconos = [
+                'icono.ico',
+                'data/icono.ico', 
+                'data/icono.png',
+                'icono.png',
+                os.path.join(os.path.dirname(__file__), 'icono.ico'),
+                os.path.join(os.path.dirname(__file__), 'data', 'icono.ico')
+            ]
+            
+            icono_encontrado = False
+            for icon_path in posibles_iconos:
+                if os.path.exists(icon_path):
+                    from PyQt6.QtGui import QIcon
+                    icono = QIcon(icon_path)
+                    self.setWindowIcon(icono)
+                    
+                    # CONFIGURACIÓN ESPECÍFICA PARA WINDOWS
+                    if es_windows():
+                        try:
+                            import ctypes
+                            # Usar un AppUserModelID único
+                            app_id = 'cajaregistradora.pro.1.0'
+                            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+                            print(f"✅ AppUserModelID configurado para Windows: {app_id}")
+                        except Exception as win_error:
+                            print(f"⚠️ No se pudo configurar AppUserModelID: {win_error}")
+                    
+                    print(f"✅ Icono cargado: {icon_path}")
+                    icono_encontrado = True
+                    break
+                    
+            if not icono_encontrado:
+                print("⚠️ No se encontró archivo de icono en ninguna ubicación:")
+                for path in posibles_iconos:
+                    print(f"   • {path} - {'EXISTE' if os.path.exists(path) else 'NO EXISTE'}")
+                
+        except Exception as e:
+            print(f"❌ Error configurando icono: {e}")
 
     def inicializar_configuracion_por_defecto(self):
         """Crea configuración por defecto si no existe"""
@@ -222,9 +268,14 @@ class CajaGUI(QWidget):
             print(f"❌ Error guardando configuración al cerrar: {e}")
 
     def closeEvent(self, event):
-        """Se ejecuta cuando la ventana se cierra"""
-        self.guardar_configuracion_al_cerrar()
-        event.accept()
+        """Se ejecuta cuando la ventana se cierra - VERSIÓN SIMPLE"""
+        try:
+            self.guardar_configuracion_al_cerrar()
+            event.accept()
+        except Exception as e:
+            print(f"❌ Error en closeEvent: {e}")
+            self.guardar_configuracion_al_cerrar()
+            event.accept()
 
     def verificar_licencia(self):
         """Verificar licencia - PERMITE USAR DEMO SIN ACTIVAR INMEDIATAMENTE"""
@@ -378,6 +429,10 @@ class CajaGUI(QWidget):
         if self.current_user['rol'] != 'admin':
             QMessageBox.warning(self, "Error", "Solo administradores pueden gestionar inventario")
             return
+        
+         # CONECTAR LA SEÑAL DE ACTUALIZACIÓN
+        dialog.productos_actualizados.connect(self.cargar_productos)
+
         dialog = InventoryManagerDialog(self.db_manager, self)
         dialog.exec()
         self.cargar_productos()
@@ -710,6 +765,96 @@ class CajaGUI(QWidget):
         self.actualizar_tabla()
         QMessageBox.information(self, "Venta cancelada", "Carrito vacío.")
 
+    def enviar_ticket_por_email(self, ticket_path, venta_id, total):
+        """Ofrece enviar ticket por email usando QThreadPool - VERSIÓN DEFINITIVA"""
+        try:
+            print("📧 Iniciando proceso de envío de email...")
+            
+            # Verificar si el email está configurado
+            if not self.email_sender.config.get("habilitado", False):
+                print("❌ Email no configurado, saliendo...")
+                return
+            
+            respuesta = QMessageBox.question(
+                self,
+                "📧 Envío de Ticket",
+                "¿Desea enviar el ticket por correo electrónico al cliente?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if respuesta == QMessageBox.StandardButton.Yes:
+                email_cliente, ok = QInputDialog.getText(
+                    self, 
+                    "Email del Cliente",
+                    "Ingrese el email del cliente:",
+                    text=""
+                )
+                
+                if ok and email_cliente.strip():
+                    print(f"📧 Email del cliente: {email_cliente.strip()}")
+                    
+                    self.mostrar_progreso_email()
+                    
+                    try:
+                        print("🔄 Creando worker de email...")
+                        email_worker = self.email_sender.enviar_ticket_async(
+                            ticket_path, 
+                            email_cliente.strip(),
+                            venta_id,
+                            total,
+                            self.config.get("nombre_negocio", "")
+                        )
+                        
+                        print(f"✅ Worker obtenido: {email_worker}")
+                        
+                        if hasattr(email_worker, 'signals'):
+                            # Es un worker de QThreadPool - conectar señales
+                            print("✅ Conectando señales del worker...")
+                            email_worker.signals.email_enviado.connect(self.procesar_resultado_email)
+                            email_worker.signals.progreso.connect(self.actualizar_progreso_email)
+                            
+                            print("✅ Iniciando worker en ThreadPool...")
+                            from PyQt6.QtCore import QThreadPool
+                            QThreadPool.globalInstance().start(email_worker)
+                            print("✅ Worker iniciado correctamente en ThreadPool")
+                        else:
+                            # Fallback al método sincrónico
+                            print("⚠️ Usando método sincrónico como fallback")
+                            resultado, mensaje = email_worker
+                            self.ocultar_progreso_email()
+                            QMessageBox.information(self, "Envío de Ticket", mensaje)
+                            
+                    except Exception as e:
+                        print(f"❌ Error iniciando worker de email: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        self.ocultar_progreso_email()
+                        QMessageBox.warning(self, "Error", f"No se pudo iniciar el envío: {str(e)}")
+                        
+        except Exception as e:
+            print(f"❌ Error en envío de email: {e}")
+            import traceback
+            traceback.print_exc()
+            self.ocultar_progreso_email()
+
+    def mostrar_progreso_email(self):
+        """Versión simplificada - solo mostrar en consola"""
+        print("📧 Iniciando envío de email...")
+
+    def actualizar_progreso_email(self, mensaje):
+        """Solo mostrar en consola"""
+        print(f"📧 {mensaje}")
+
+    def ocultar_progreso_email(self):
+        """No hacer nada en versión simplificada"""
+        print("✅ Envío de email completado")
+
+    def procesar_resultado_email(self, exito, mensaje):
+        """Procesar resultado del envío de email - VERSIÓN SIMPLIFICADA"""
+        print(f"📧 Resultado: {mensaje}")
+        self.ocultar_progreso_email()
+        QMessageBox.information(self, "Envío de Ticket", mensaje)
+
     def finalizar_venta(self):
         # VERIFICAR LICENCIA DEMO (código existente)
         if self.license_manager.tipo_licencia == "demo":
@@ -823,32 +968,7 @@ class CajaGUI(QWidget):
                 return
             
         # OFRECER ENVÍO POR EMAIL
-        if self.email_sender.config["habilitado"]:
-            respuesta = QMessageBox.question(
-                self,
-                "Envío de Ticket",
-                "¿Desea enviar el ticket por correo electrónico al cliente?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            
-            if respuesta == QMessageBox.StandardButton.Yes:
-                email_cliente, ok = QInputDialog.getText(
-                    self, 
-                    "Email del Cliente",
-                    "Ingrese el email del cliente:",
-                    text=""
-                )
-                
-                if ok and email_cliente.strip():
-                    resultado, mensaje = self.email_sender.enviar_ticket(
-                        ticket_path, 
-                        email_cliente.strip(),
-                        venta_id,
-                        total,
-                        self.config.get("nombre_negocio", "")
-                    )
-                    
-                    QMessageBox.information(self, "Envío de Ticket", mensaje)
+        self.enviar_ticket_por_email(ticket_path, venta_id, total)
 
     def actualizar_resumen_ventas_hoy(self):
         """Actualiza el resumen de ventas del día actual"""
