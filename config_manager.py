@@ -44,6 +44,9 @@ class ConfigManager:
                     config = json.load(f)
                 logger.info("Configuración cargada exitosamente")
                 
+                # ✅ LLAMAR A LA VERIFICACIÓN SEGURA
+                verificar_configuracion_segura(config)  # <-- ESTA LÍNEA SE AGREGA
+                
                 # ✅ ASEGURAR VALORES POR DEFECTO SI FALTAN
                 return self.ensure_default_values(config)
             else:
@@ -139,3 +142,21 @@ class ConfigManager:
 
 # Instancia global para importar
 config_manager = ConfigManager()
+
+# === SEGURIDAD ADICIONAL - FUERA DE LA CLASE ===
+def verificar_configuracion_segura(config):
+    """Verifica configuración sin romper funcionalidad - FUERA DE CLASE"""
+    try:
+        # Verificar campos esenciales
+        campos_esenciales = ['nombre_negocio', 'tema', 'impuestos']  # Cambié 'iva' por 'impuestos'
+        
+        for campo in campos_esenciales:
+            if campo not in config:
+                print(f"⚠️  Campo esencial faltante: {campo}")
+                return False
+                
+        return True
+        
+    except Exception as e:
+        print(f"⚠️  Error en verificación segura: {e}")
+        return True  # No bloquear si hay error

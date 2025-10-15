@@ -720,15 +720,11 @@ class DialogoActivacion(QDialog):
             <table style='width: 100%; color: {texto_primario};'>
             <tr>
                 <td style='padding: 5px;'>📧 Email:</td>
-                <td style='padding: 5px;'>ventas@cajaregistradora.com</td>
+                <td style='padding: 5px;'>enc0d3rservicios@gmail.com</td>
             </tr>
             <tr>
-                <td style='padding: 5px;'>📱 Teléfono:</td>
-                <td style='padding: 5px;'>+52 55 1234 5678</td>
-            </tr>
-            <tr>
-                <td style='padding: 5px;'>🌐 Sitio web:</td>
-                <td style='padding: 5px;'>www.cajaregistradora.com</td>
+                <td style='padding: 5px;'>📱 WhatsApp:</td>
+                <td style='padding: 5px;'>5518604370</td>
             </tr>
             <tr>
                 <td style='padding: 5px;'>⏰ Horario:</td>

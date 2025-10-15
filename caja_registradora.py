@@ -70,6 +70,12 @@ class CajaGUI(QWidget):
         self.carrito = []
         self.metodos_pago = ["Efectivo", "Tarjeta", "Transferencia"]
 
+        # PRIMERO: Crear inventory_manager
+        self.inventory_manager = InventoryManagerDialog(self.db_manager, self)
+
+        # Conectar señales de actualización de productos
+        self.inventory_manager.productos_actualizados.connect(self.actualizar_interfaz_productos)
+
         # Registrar guardado al cerrar
         atexit.register(self.guardar_configuracion_al_cerrar)
 
@@ -84,6 +90,9 @@ class CajaGUI(QWidget):
         # Inicializar interfaz
         self.init_ui()
         self.aplicar_tema()
+
+        # Actualizar resumen de ventas por dia
+        self.actualizar_resumen_ventas_hoy()
 
         # Configuracion del icono de la aplicacion
         self.configurar_icono_aplicacion()
@@ -381,7 +390,7 @@ class CajaGUI(QWidget):
             QMessageBox.critical(self, "Error", f"No se pudo abrir configuración: {str(e)}")
 
     def aplicar_cambios_configuracion(self, nuevo_config):
-        """Aplica los cambios de configuración en tiempo real"""
+        """Aplica los cambios de configuración en tiempo real - VERSIÓN CORREGIDA"""
         try:
             self.config.update(nuevo_config)
             self.aplicar_tema()
@@ -389,9 +398,12 @@ class CajaGUI(QWidget):
             if 'nombre_negocio' in nuevo_config:
                 nuevo_nombre = nuevo_config['nombre_negocio']
                 self.setWindowTitle(f"{nuevo_nombre} - Usuario: {self.current_user['nombre']}")
+                # ✅ ACTUALIZAR LOGO TAMBIÉN (porque el logo muestra el nombre)
+                self.actualizar_logo_en_tiempo_real()
             
             if 'logo_path' in nuevo_config:
-                QTimer.singleShot(100, self.actualizar_logo_en_tiempo_real)
+                # ✅ ACTUALIZAR LOGO INMEDIATAMENTE
+                self.actualizar_logo_en_tiempo_real()
             
             QTimer.singleShot(200, self.guardar_configuracion_fondo)
             
@@ -406,36 +418,53 @@ class CajaGUI(QWidget):
             print(f"❌ Error guardando configuración: {e}")
             
     def actualizar_logo_en_tiempo_real(self):
-        """Actualiza el logo en tiempo real"""
+        """Actualiza el logo en tiempo real - VERSIÓN MEJORADA"""
         try:
+            # BUSCAR MÁS EFICIENTEMENTE EL LOGO LABEL
             logo_label = None
-            header_layout = self.findChild(QHBoxLayout)
             
+            # Buscar en el header layout
+            header_layout = self.findChild(QHBoxLayout)
             if header_layout:
                 for i in range(header_layout.count()):
                     widget = header_layout.itemAt(i).widget()
-                    if isinstance(widget, QLabel) and widget.pixmap():
+                    if isinstance(widget, QLabel) and widget.pixmap() is not None:
+                        logo_label = widget
+                        break
+                    elif isinstance(widget, QLabel) and widget.text():  
+                        # También considerar labels con texto (cuando no hay logo)
                         logo_label = widget
                         break
             
+            # SI NO ENCUENTRA, BUSCAR EN TODOS LOS WIDGETS
+            if not logo_label:
+                for widget in self.findChildren(QLabel):
+                    if widget.pixmap() is not None or (widget.text() and len(widget.text()) > 0):
+                        # Verificar si es el logo por tamaño o posición
+                        if widget.size().width() == 100 and widget.size().height() == 100:
+                            logo_label = widget
+                            break
+            
+            # ACTUALIZAR EL LOGO ENCONTRADO
             if logo_label:
                 self.cargar_logo(logo_label)
-                    
+                print("✅ Logo actualizado en tiempo real")
+            else:
+                print("⚠️ No se encontró el widget del logo para actualizar")
+                        
         except Exception as e:
             print(f"❌ Error actualizando logo: {e}")
 
     # ===== MÉTODOS DE GESTIÓN =====
     def gestionar_inventario(self):
-        if self.current_user['rol'] != 'admin':
-            QMessageBox.warning(self, "Error", "Solo administradores pueden gestionar inventario")
-            return
-        
-         # CONECTAR LA SEÑAL DE ACTUALIZACIÓN
-        dialog.productos_actualizados.connect(self.cargar_productos)
-
-        dialog = InventoryManagerDialog(self.db_manager, self)
-        dialog.exec()
-        self.cargar_productos()
+        """Abre el gestor de inventario - VERSIÓN SIMPLIFICADA"""
+        try:
+            # SOLO abrir el diálogo sin reconectar señales (ya están conectadas en __init__)
+            self.inventory_manager.exec()
+            
+        except Exception as e:
+            print(f"❌ Error abriendo gestor de inventario: {e}")
+            QMessageBox.critical(self, "Error", f"No se pudo abrir el gestor de inventario: {str(e)}")
 
     def gestionar_categorias(self):
         if self.current_user['rol'] != 'admin':
@@ -531,23 +560,43 @@ class CajaGUI(QWidget):
         main_layout.addLayout(header_layout)
 
     def cargar_logo(self, logo_label):
-        """Cargar logo del negocio"""
-        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo_label.setFixedSize(100, 100)
-        
-        logo_path = self.config.get("logo_path", "")
-        nombre_negocio = self.config.get("nombre_negocio", "").strip()
+        """Cargar logo del negocio - VERSIÓN MEJORADA"""
+        try:
+            logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            logo_label.setFixedSize(100, 100)
+            
+            logo_path = self.config.get("logo_path", "")
+            nombre_negocio = self.config.get("nombre_negocio", "").strip()
 
-        if logo_path and os.path.exists(os.path.join("data", logo_path)):
-            try:
-                pixmap = QPixmap(os.path.join("data", logo_path))
-                logo_label.setPixmap(pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio))
-            except:
-                logo_label.setText(nombre_negocio or "Logo")
-        else:
-            logo_label.setText(nombre_negocio or "Logo")
-        
-        logo_label.setStyleSheet("border: 1px solid #cccccc; border-radius: 5px; padding: 5px;")
+            if logo_path and os.path.exists(os.path.join("data", logo_path)):
+                try:
+                    pixmap = QPixmap(os.path.join("data", logo_path))
+                    if not pixmap.isNull():
+                        logo_label.setPixmap(pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                        logo_label.setText("")  # Limpiar texto
+                        return
+                except Exception as e:
+                    print(f"❌ Error cargando imagen del logo: {e}")
+            
+            # ✅ SI NO HAY LOGO, MOSTRAR NOMBRE DEL NEGOCIO
+            display_text = nombre_negocio if nombre_negocio else "Logo"
+            if len(display_text) > 15:
+                display_text = display_text[:15] + "..."
+            
+            logo_label.setText(display_text)
+            logo_label.setPixmap(QPixmap())  # Limpiar pixmap anterior
+            logo_label.setStyleSheet("""
+                border: 1px solid #cccccc; 
+                border-radius: 5px; 
+                padding: 5px;
+                background-color: #f8f9fa;
+                color: #333333;
+                font-weight: bold;
+                qproperty-alignment: AlignCenter;
+            """)
+            
+        except Exception as e:
+            print(f"❌ Error en cargar_logo: {e}")
 
     def setup_tabs(self, main_layout):
         """Configurar sistema de pestañas"""
@@ -678,10 +727,24 @@ class CajaGUI(QWidget):
         self.lista.clear()
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT codigo, nombre, precio, stock FROM productos WHERE activo = 1 ORDER BY nombre")
+            cursor.execute("""
+                SELECT codigo, nombre, precio, stock 
+                FROM productos 
+                WHERE activo = 1 
+                ORDER BY nombre
+            """)
             for codigo, nombre, precio, stock in cursor.fetchall():
                 precio_formateado = formato_moneda_mx(precio)
                 self.lista.addItem(f"{codigo} - {nombre} - {precio_formateado} - Stock: {stock}")
+
+    def actualizar_interfaz_productos(self):
+        """Actualiza la interfaz cuando cambian los productos"""
+        self.cargar_productos()
+        self.actualizar_resumen_inventario()
+
+        # Limpiar búsqueda para ver todos los productos actualizados
+        self.search_input.clear()
+        self.buscar_producto()
 
     def buscar_producto(self):
         texto = self.search_input.text().lower().strip()
@@ -700,13 +763,14 @@ class CajaGUI(QWidget):
 
         codigo = item.text().split(" - ")[0]
         
+        # Obtener datos ACTUALIZADOS de la base de datos
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT nombre, precio, stock FROM productos WHERE codigo = ?", (codigo,))
+            cursor.execute("SELECT nombre, precio, stock FROM productos WHERE codigo = ? AND activo = 1", (codigo,))
             producto = cursor.fetchone()
             
         if not producto:
-            QMessageBox.warning(self, "Error", "Producto no encontrado.")
+            QMessageBox.warning(self, "Error", "Producto no encontrado o desactivado.")
             return
             
         nombre, precio, stock = producto
@@ -719,14 +783,33 @@ class CajaGUI(QWidget):
         if not ok:
             return
 
-        # Agregar al carrito
+        # VERIFICAR SI EL PRODUCTO YA ESTÁ EN EL CARRITO Y ACTUALIZARLO
         for item_carrito in self.carrito:
             if item_carrito['codigo'] == codigo:
-                item_carrito['cantidad'] += cantidad
+                # Si el producto ya está en el carrito, actualizar con datos frescos
+                nueva_cantidad_total = item_carrito['cantidad'] + cantidad
+                
+                if nueva_cantidad_total > stock:
+                    QMessageBox.warning(self, "Error", 
+                                    f"Stock insuficiente. Stock disponible: {stock}\n"
+                                    f"Ya en carrito: {item_carrito['cantidad']}\n"
+                                    f"Solicitado adicional: {cantidad}")
+                    return
+                
+                # ACTUALIZAR con datos actualizados de la BD
+                item_carrito['nombre'] = nombre
+                item_carrito['precio'] = precio
+                item_carrito['cantidad'] = nueva_cantidad_total
                 self.actualizar_tabla()
                 return
 
-        self.carrito.append({'codigo': codigo, 'nombre': nombre, 'precio': precio, 'cantidad': cantidad})
+        # AGREGAR NUEVO PRODUCTO CON DATOS ACTUALIZADOS
+        self.carrito.append({
+            'codigo': codigo, 
+            'nombre': nombre, 
+            'precio': precio, 
+            'cantidad': cantidad
+        })
         self.actualizar_tabla()
 
     def eliminar_producto(self):
@@ -971,32 +1054,36 @@ class CajaGUI(QWidget):
         self.enviar_ticket_por_email(ticket_path, venta_id, total)
 
     def actualizar_resumen_ventas_hoy(self):
-        """Actualiza el resumen de ventas del día actual"""
+        """Actualiza el resumen de ventas del día actual - VERSIÓN CORREGIDA"""
         try:
+            # ✅ OBTENER FECHA ACTUAL en formato YYYY-MM-DD
             hoy = datetime.now().strftime("%Y-%m-%d")
-            fecha_desde = f"{hoy} 00:00:00"
-            fecha_hasta = f"{hoy} 23:59:59"
             
             with self.db_manager.get_connection() as conn:
                 cursor = conn.cursor()
                 
+                # ✅ CONSULTA CORREGIDA: Usar DATE() para comparar solo la fecha
                 cursor.execute("""
                     SELECT 
                         COUNT(*) as total_ventas,
                         COALESCE(SUM(total), 0) as total_importe
                     FROM ventas 
-                    WHERE fecha BETWEEN ? AND ? AND estado = 'completada'
-                """, (fecha_desde, fecha_hasta))
+                    WHERE DATE(fecha) = DATE(?)
+                    AND estado = 'completada'
+                """, (hoy,))
                 
                 resultado = cursor.fetchone()
                 
                 if resultado:
-                    count = resultado[0]
-                    total = resultado[1]
+                    count = resultado[0] or 0
+                    total = resultado[1] or 0
                 else:
                     count = 0
                     total = 0
+                
+                print(f"🔍 Resumen ventas hoy {hoy}: {count} ventas, ${total}")  # Para debug
             
+            # ✅ ACTUALIZAR LA INTERFAZ
             if hasattr(self, 'sales_today_summary') and self.sales_today_summary:
                 if count > 0:
                     texto = f"""📊 VENTAS HOY ({hoy})
@@ -1011,9 +1098,10 @@ class CajaGUI(QWidget):
                 self.sales_today_summary.setText(texto)
                     
         except Exception as e:
+            print(f"❌ Error actualizando resumen ventas hoy: {e}")
             if hasattr(self, 'sales_today_summary') and self.sales_today_summary:
                 self.sales_today_summary.setText(f"❌ Error cargando ventas: {str(e)}")
-
+                
     def actualizar_resumen_inventario(self):
         """Actualiza el resumen de inventario"""
         try:

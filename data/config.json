@@ -1,8 +1,8 @@
 {
-    "nombre_negocio": "Don Beto Shop",
+    "nombre_negocio": "Don Beto y sus Betitos Shop",
     "color_primario": "#3498db",
     "color_secundario": "#2ecc71",
-    "logo_path": "icono_1.png",
+    "logo_path": "icono.png",
     "moneda": "MXN",
     "impuestos": 16.0,
     "direccion": "",
