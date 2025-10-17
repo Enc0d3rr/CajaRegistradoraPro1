@@ -639,16 +639,15 @@ class ConfigPanelDialog(QDialog):
             QMessageBox.critical(self, "Error", f"Error probando conexión: {str(e)}")
 
     def guardar_configuracion(self):
-        """Guardar configuración"""
+        """Guardar configuración - VERSIÓN CORREGIDA"""
         try:
-            # Validaciones
+            # Validaciones (código existente)
             nombre_negocio = self.nombre_input.text().strip()
             if not nombre_negocio:
                 QMessageBox.warning(self, "Error", "El nombre del negocio no puede estar vacío")
                 return
         
             try:
-                # CORREGIDO: Usar impuestos_input (que es el campo real)
                 impuestos = float(self.impuestos_input.text() or 16.0)
                 if impuestos < 0 or impuestos > 100:
                     QMessageBox.warning(self, "Error", "Los impuestos deben estar entre 0 y 100%")
@@ -657,23 +656,30 @@ class ConfigPanelDialog(QDialog):
                 QMessageBox.warning(self, "Error", "Los impuestos deben ser un número válido")
                 return
 
-            # DETERMINAR TEMA SELECCIONADO (de los radio buttons)
+            # Determinar tema
             tema_seleccionado = 'oscuro' if self.radio_oscuro.isChecked() else 'claro'
 
-            # ACTUALIZAR CONFIGURACIÓN ACTUAL - USANDO LOS CAMPOS CORRECTOS
+            # Nueva configuración
             nuevo_config = {
                 'nombre_negocio': self.nombre_input.text(),
-                'tema': tema_seleccionado,  # ✅ CORREGIDO: Usar el tema de los radio buttons
-                'impuestos': impuestos,  # ✅ CORREGIDO: impuestos en lugar de iva
-                'moneda': self.moneda_combo.currentText(),  # ✅ CORREGIDO: moneda_combo en lugar de moneda_input
-                'logo_path': self.config.get('logo_path', ''),  # ✅ CORREGIDO: Usar self.config
-                'telefono': self.config.get('telefono', ''),    # ✅ CORREGIDO: Usar self.config
-                'direccion': self.config.get('direccion', '')   # ✅ CORREGIDO: Usar self.config
+                'tema': tema_seleccionado,  
+                'impuestos': impuestos,  
+                'moneda': self.moneda_combo.currentText(),  
+                'logo_path': self.config.get('logo_path', ''),  
+                'telefono': self.config.get('telefono', ''),    
+                'direccion': self.config.get('direccion', '')   
             }
             
-            print(f"✅ Configuración a guardar: {nuevo_config}")  # Para debug
+            # SOLUCIÓN: Llamar DIRECTAMENTE en lugar de usar señal
+            if hasattr(self, 'parent') and self.parent():
+                # Actualizar logo INMEDIATAMENTE
+                self.parent().config.update(nuevo_config)
+                if hasattr(self.parent(), 'logo_label') and self.parent().logo_label:
+                    self.parent().cargar_logo(self.parent().logo_label)
+                    self.parent().logo_label.update()
+                    self.parent().logo_label.repaint()
             
-            # EMITIR SEÑAL CON LA NUEVA CONFIGURACIÓN
+            # También emitir señal por si acaso
             self.config_changed.emit(nuevo_config)
             
             QMessageBox.information(self, "Éxito", "Configuración guardada correctamente")

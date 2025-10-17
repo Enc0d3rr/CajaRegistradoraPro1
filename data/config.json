@@ -1,8 +1,8 @@
 {
-    "nombre_negocio": "Don Beto y sus Betitos Shop",
+    "nombre_negocio": "Local Skateshop",
     "color_primario": "#3498db",
     "color_secundario": "#2ecc71",
-    "logo_path": "icono.png",
+    "logo_path": "logo2.png",
     "moneda": "MXN",
     "impuestos": 16.0,
     "direccion": "",

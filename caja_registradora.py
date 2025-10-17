@@ -287,69 +287,29 @@ class CajaGUI(QWidget):
             event.accept()
 
     def verificar_licencia(self):
-        """Verificar licencia - PERMITE USAR DEMO SIN ACTIVAR INMEDIATAMENTE"""
+        """Verificar licencia - VERSIÓN SIMPLIFICADA"""
         try:
-            # ✅ PRIMERO verificar si ya tiene licencia válida
-            if self.license_manager.validar_licencia():
+            # ✅ DELEGAR TODA LA LÓGICA AL LICENSE_MANAGER
+            licencia_valida = self.license_manager.validar_licencia()
+            
+            if licencia_valida:
                 info = self.license_manager.obtener_info_licencia()
-                print(f"✅ Licencia verificada - Tipo: {info['tipo']} - Plan: {info.get('plan', 'premium')}")
-                return True
-            
-            # ✅ SI NO TIENE LICENCIA, verificar si puede usar demo
-            info_demo = self.license_manager.obtener_info_licencia()
-            if info_demo['tipo'] == 'demo' and info_demo['estado'] == 'activa':
-                print(f"🔬 Modo demo activo - Ventas restantes: {info_demo['dias_restantes']}")
-                return True  # ✅ PERMITIR USAR DEMO
-            
-            # ✅ SOLO si la demo está expirada, mostrar diálogo de activación
-            print("❌ Licencia no válida y demo expirada, mostrando opciones...")
-            
-            from licenses.dialogo_activacion import DialogoActivacion
-            
-            tema_actual = self.config.get('tema', 'claro')
-            activacion_dialog = DialogoActivacion(self.license_manager, self, tema_actual)
-            activacion_dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowCloseButtonHint)
-            
-            result = activacion_dialog.exec()
-            
-            if result == QDialog.DialogCode.Rejected:
-                # Usuario cerró el diálogo, preguntar si quiere usar demo
-                respuesta = QMessageBox.question(
-                    self, 
-                    "Versión Demo",
-                    "¿Desea usar la versión DEMO con 50 ventas de prueba?\n\n"
-                    "Puede activar una licencia premium después desde el menú.",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
-                
-                if respuesta == QMessageBox.StandardButton.Yes:
-                    print("✅ Usuario eligió usar versión demo")
-                    return True
-                else:
-                    QMessageBox.information(self, "Información", "La aplicación se cerrará.")
-                    return False
-                    
-            # Si activó licencia, verificar nuevamente
-            if self.license_manager.validar_licencia():
-                info = self.license_manager.obtener_info_licencia()
-                print(f"✅ Licencia activada - Plan: {info.get('plan', 'premium')}")
+                print(f"✅ Acceso PERMITIDO - {info['tipo']} ({info['estado']})")
                 return True
             else:
-                # Si falló la activación, ofrecer demo
-                respuesta = QMessageBox.question(
-                    self,
-                    "Activación Fallida", 
-                    "No se pudo activar la licencia.\n\n"
-                    "¿Desea usar la versión DEMO con 50 ventas de prueba?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
-                return respuesta == QMessageBox.StandardButton.Yes
-                    
+                info = self.license_manager.obtener_info_licencia()
+                print(f"❌ Acceso DENEGADO - {info['tipo']} ({info['estado']})")
+                
+                # ⬇️ SI ES DEMO EXPIRADA, MOSTRAR BLOQUEO PERMANENTE
+                if info['tipo'] == 'demo' and info['estado'] == 'expirada':
+                    return self.mostrar_bloqueo_permanente()
+                else:
+                    # ⬇️ PARA OTROS CASOS (demo activa pero validar_licencia retorna False)
+                    return self.mostrar_opciones_licencia_expirada()
+                
         except Exception as e:
             print(f"❌ Error verificando licencia: {e}")
-            # En caso de error, permitir demo
-            QMessageBox.warning(self, "Error", f"Error al verificar licencia: {str(e)}\n\nSe iniciará en modo demo.")
-            return True
+            return False
 
     def aplicar_tema(self):
         """Aplicar tema desde archivo themes.py"""
@@ -390,25 +350,25 @@ class CajaGUI(QWidget):
             QMessageBox.critical(self, "Error", f"No se pudo abrir configuración: {str(e)}")
 
     def aplicar_cambios_configuracion(self, nuevo_config):
-        """Aplica los cambios de configuración en tiempo real - VERSIÓN CORREGIDA"""
+        """Aplica los cambios de configuración - VERSIÓN SIMPLE"""
         try:
             self.config.update(nuevo_config)
             self.aplicar_tema()
             
             if 'nombre_negocio' in nuevo_config:
-                nuevo_nombre = nuevo_config['nombre_negocio']
-                self.setWindowTitle(f"{nuevo_nombre} - Usuario: {self.current_user['nombre']}")
-                # ✅ ACTUALIZAR LOGO TAMBIÉN (porque el logo muestra el nombre)
-                self.actualizar_logo_en_tiempo_real()
+                self.setWindowTitle(f"{nuevo_config['nombre_negocio']} - Usuario: {self.current_user['nombre']}")
             
-            if 'logo_path' in nuevo_config:
-                # ✅ ACTUALIZAR LOGO INMEDIATAMENTE
-                self.actualizar_logo_en_tiempo_real()
+            # Actualizar logo SIEMPRE que haya cambios relevantes
+            if 'logo_path' in nuevo_config or 'nombre_negocio' in nuevo_config:
+                if hasattr(self, 'logo_label') and self.logo_label:
+                    self.cargar_logo(self.logo_label)
+                    self.logo_label.update()
+                    self.logo_label.repaint()
             
-            QTimer.singleShot(200, self.guardar_configuracion_fondo)
+            config_manager.update_config(self.config)
             
         except Exception as e:
-            print(f"❌ Error aplicando cambios: {e}")
+            print(f"Error aplicando cambios: {e}")
 
     def guardar_configuracion_fondo(self):
         """Guardar configuración en segundo plano"""
@@ -416,44 +376,6 @@ class CajaGUI(QWidget):
             config_manager.update_config(self.config)
         except Exception as e:
             print(f"❌ Error guardando configuración: {e}")
-            
-    def actualizar_logo_en_tiempo_real(self):
-        """Actualiza el logo en tiempo real - VERSIÓN MEJORADA"""
-        try:
-            # BUSCAR MÁS EFICIENTEMENTE EL LOGO LABEL
-            logo_label = None
-            
-            # Buscar en el header layout
-            header_layout = self.findChild(QHBoxLayout)
-            if header_layout:
-                for i in range(header_layout.count()):
-                    widget = header_layout.itemAt(i).widget()
-                    if isinstance(widget, QLabel) and widget.pixmap() is not None:
-                        logo_label = widget
-                        break
-                    elif isinstance(widget, QLabel) and widget.text():  
-                        # También considerar labels con texto (cuando no hay logo)
-                        logo_label = widget
-                        break
-            
-            # SI NO ENCUENTRA, BUSCAR EN TODOS LOS WIDGETS
-            if not logo_label:
-                for widget in self.findChildren(QLabel):
-                    if widget.pixmap() is not None or (widget.text() and len(widget.text()) > 0):
-                        # Verificar si es el logo por tamaño o posición
-                        if widget.size().width() == 100 and widget.size().height() == 100:
-                            logo_label = widget
-                            break
-            
-            # ACTUALIZAR EL LOGO ENCONTRADO
-            if logo_label:
-                self.cargar_logo(logo_label)
-                print("✅ Logo actualizado en tiempo real")
-            else:
-                print("⚠️ No se encontró el widget del logo para actualizar")
-                        
-        except Exception as e:
-            print(f"❌ Error actualizando logo: {e}")
 
     # ===== MÉTODOS DE GESTIÓN =====
     def gestionar_inventario(self):
@@ -507,14 +429,14 @@ class CajaGUI(QWidget):
         self.cargar_productos()
 
     def setup_header(self, main_layout):
-        """Configurar encabezado"""
         header_layout = QHBoxLayout()
-        
+    
         # Logo
-        logo_label = QLabel()
-        self.cargar_logo(logo_label)
-        header_layout.addWidget(logo_label)
-        header_layout.addStretch(1)
+        self.logo_label = QLabel()
+        self.logo_label.setObjectName("logo_negocio_principal")
+        self.logo_label.setFixedSize(100, 100)
+        self.cargar_logo(self.logo_label)
+        header_layout.addWidget(self.logo_label)
         
         # Información de usuario
         user_info = QLabel(f"Usuario: {self.current_user['nombre']}\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -549,7 +471,6 @@ class CajaGUI(QWidget):
         self.btn_licencia.clicked.connect(self.mostrar_estado_licencia)
         header_layout.addWidget(self.btn_licencia)
         
-
         # Actualizar hora
         self.timer = QTimer()
         self.timer.timeout.connect(lambda: user_info.setText(
@@ -558,45 +479,76 @@ class CajaGUI(QWidget):
         self.timer.start(1000)
         
         main_layout.addLayout(header_layout)
+        print("✅ Header configurado con referencia al logo")
 
     def cargar_logo(self, logo_label):
-        """Cargar logo del negocio - VERSIÓN MEJORADA"""
+        """Cargar logo del negocio - VERSIÓN CORREGIDA PARA PROBLEMA DE VISIBILIDAD"""
         try:
             logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             logo_label.setFixedSize(100, 100)
             
             logo_path = self.config.get("logo_path", "")
-            nombre_negocio = self.config.get("nombre_negocio", "").strip()
+            nombre_negocio = self.config.get("nombre_negocio", "Mi Negocio").strip()
 
+            # PRIMERO: Intentar cargar imagen del logo
             if logo_path and os.path.exists(os.path.join("data", logo_path)):
                 try:
                     pixmap = QPixmap(os.path.join("data", logo_path))
                     if not pixmap.isNull():
-                        logo_label.setPixmap(pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                        # CARGAR LOGO EXITOSAMENTE
+                        scaled_pixmap = pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                        logo_label.setPixmap(scaled_pixmap)
                         logo_label.setText("")  # Limpiar texto
+                        
+                        # ESTILO NEUTRO PARA LOGO CON IMAGEN
+                        logo_label.setStyleSheet("""
+                            border: 1px solid #cccccc; 
+                            border-radius: 5px; 
+                            padding: 2px;
+                            background-color: transparent;
+                        """)
+                        print(f"✅ Logo cargado: {logo_path}")
                         return
+                        
                 except Exception as e:
                     print(f"❌ Error cargando imagen del logo: {e}")
-            
-            # ✅ SI NO HAY LOGO, MOSTRAR NOMBRE DEL NEGOCIO
-            display_text = nombre_negocio if nombre_negocio else "Logo"
-            if len(display_text) > 15:
-                display_text = display_text[:15] + "..."
+
+            # SI NO HAY LOGO, MOSTRAR NOMBRE DEL NEGOCIO CON ESTILO VISIBLE
+            display_text = nombre_negocio if nombre_negocio else "Mi Negocio"
+            if len(display_text) > 12:
+                display_text = display_text[:12] + "..."
             
             logo_label.setText(display_text)
             logo_label.setPixmap(QPixmap())  # Limpiar pixmap anterior
+            
+            # ESTILO MEJORADO QUE FUNCIONA EN AMBOS TEMAS
             logo_label.setStyleSheet("""
-                border: 1px solid #cccccc; 
-                border-radius: 5px; 
-                padding: 5px;
-                background-color: #f8f9fa;
-                color: #333333;
-                font-weight: bold;
-                qproperty-alignment: AlignCenter;
+                QLabel {
+                    border: 2px solid #3498db; 
+                    border-radius: 8px; 
+                    padding: 8px;
+                    background-color: #ffffff;
+                    color: #2c3e50;
+                    font-weight: bold;
+                    font-size: 11px;
+                    qproperty-alignment: AlignCenter;
+                }
             """)
+            
+            print(f"✅ Mostrando nombre del negocio: {display_text}")
             
         except Exception as e:
             print(f"❌ Error en cargar_logo: {e}")
+            # Estilo de emergencia que siempre será visible
+            logo_label.setText("Mi Negocio")
+            logo_label.setStyleSheet("""
+                border: 2px solid red; 
+                border-radius: 5px; 
+                padding: 5px;
+                background-color: white;
+                color: black;
+                font-weight: bold;
+            """)
 
     def setup_tabs(self, main_layout):
         """Configurar sistema de pestañas"""
@@ -723,6 +675,7 @@ class CajaGUI(QWidget):
         self.actualizar_resumen_ventas_hoy()
 
     # ===== MÉTODOS DE NEGOCIO =====
+
     def cargar_productos(self):
         self.lista.clear()
         with self.db_manager.get_connection() as conn:
@@ -939,9 +892,20 @@ class CajaGUI(QWidget):
         QMessageBox.information(self, "Envío de Ticket", mensaje)
 
     def finalizar_venta(self):
-        # VERIFICAR LICENCIA DEMO (código existente)
+        # VERIFICAR LICENCIA DEMO 
         if self.license_manager.tipo_licencia == "demo":
+            self.license_manager.cargar_configuracion()
             ventas_realizadas = self.license_manager.config_demo["ventas_realizadas"]
+            # VERIFICAR SI YA EXPIRO (BLOQUEO PERMANENTE)
+            if self.license_manager.config_demo.get('licencia_expirada', False):
+                QMessageBox.warning(
+                    self, 
+                    "Licencia Demo Expirada",
+                    f"❌ Ha alcanzado el límite de {self.license_manager.limite_ventas_demo} ventas.\n\n"
+                    "Para continuar vendiendo, active una licencia premium."
+                )
+                return
+            
             if ventas_realizadas >= self.license_manager.limite_ventas_demo:
                 QMessageBox.warning(
                     self, 
@@ -1056,13 +1020,13 @@ class CajaGUI(QWidget):
     def actualizar_resumen_ventas_hoy(self):
         """Actualiza el resumen de ventas del día actual - VERSIÓN CORREGIDA"""
         try:
-            # ✅ OBTENER FECHA ACTUAL en formato YYYY-MM-DD
+            # OBTENER FECHA ACTUAL en formato YYYY-MM-DD
             hoy = datetime.now().strftime("%Y-%m-%d")
             
             with self.db_manager.get_connection() as conn:
                 cursor = conn.cursor()
                 
-                # ✅ CONSULTA CORREGIDA: Usar DATE() para comparar solo la fecha
+                # CONSULTA CORREGIDA: Usar DATE() para comparar solo la fecha
                 cursor.execute("""
                     SELECT 
                         COUNT(*) as total_ventas,
@@ -1083,7 +1047,7 @@ class CajaGUI(QWidget):
                 
                 print(f"🔍 Resumen ventas hoy {hoy}: {count} ventas, ${total}")  # Para debug
             
-            # ✅ ACTUALIZAR LA INTERFAZ
+            # ACTUALIZAR LA INTERFAZ
             if hasattr(self, 'sales_today_summary') and self.sales_today_summary:
                 if count > 0:
                     texto = f"""📊 VENTAS HOY ({hoy})
@@ -1186,51 +1150,52 @@ class CajaGUI(QWidget):
             QMessageBox.information(self, "Licencia", "Estado: Activada")
 
     def mostrar_activacion(self):
-        """Muestra diálogo de activación"""
+        """Muestra diálogo de activación - CON DEBUG DE TEMA"""
         try:
             from licenses.dialogo_activacion import DialogoActivacion
-        
+            
+            # ⬇️ OBTENER TEMA Y VERIFICAR
             tema_actual = self.config.get('tema', 'claro')
+            print(f"🔍 TEMA ACTUAL DE LA APP: {tema_actual}")
+            print(f"🔍 Config completa: {self.config}")
+            
+            # ⬇️ CREAR DIÁLOGO CON TEMA EXPLÍCITO
             dialogo = DialogoActivacion(self.license_manager, self, tema_actual)
-        
+            
             resultado = dialogo.exec()
-        
+            
             if resultado == QDialog.DialogCode.Accepted:
                 if self.license_manager.validar_licencia():
-                    info = self.license_manager.obtener_info_licencia()
-                    QMessageBox.information(
-                        self, 
-                        "✅ Activación Exitosa",
-                        f"Licencia {info.get('plan', 'premium')} activada correctamente!\n\n"
-                        f"Válida por: {info['dias_restantes']} días\n"
-                        f"Expira: {info['expiracion']}"
-                    )
-                else:
-                    QMessageBox.warning(self, "Error", "La activación no fue exitosa")
+                    QMessageBox.information(self, "✅ Éxito", "Licencia activada correctamente")
+                    return True
+            
+            return False
             
         except Exception as e:
-            QMessageBox.warning(self, "Error", "No se pudo abrir el diálogo de activación")
+            print(f"❌ Error en mostrar_activacion: {e}")
+            QMessageBox.warning(self, "Error", f"Error en activación: {str(e)}")
+            return False
 
     def mostrar_opciones_licencia_expirada(self):
         """Muestra opciones cuando la licencia demo expira"""
         from PyQt6.QtWidgets import QMessageBox, QPushButton
-    
+
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("Límite Demo Alcanzado")
         msg_box.setIcon(QMessageBox.Icon.Warning)
     
         mensaje = f"""
-        ⚠️ HA ALCANZADO EL LÍMITE DE {self.license_manager.limite_ventas_demo} VENTAS
+        ¡¡HA ALCANZADO EL LÍMITE DE {self.license_manager.limite_ventas_demo} VENTAS!!
     
         La versión demo ha expirado. Para continuar usando el software:
     
-        💎 **Opciones disponibles:**
+        💎 Opciones disponibles:
         • Activar una licencia premium (uso ilimitado)
         • Contactar para adquirir una licencia
     
-        📞 **Contacto:**
-        📧 ventas@cajaregistradora.com
-        📱 +52 55 1234 5678
+        📞 Contacto:
+        󰇰  enc0d3rservicios@gmail.com
+        󰖣  5518604370
         """
     
         msg_box.setText(mensaje)
@@ -1238,15 +1203,15 @@ class CajaGUI(QWidget):
         btn_activar = QPushButton("🎫 Activar Licencia Premium")
         btn_contacto = QPushButton("📞 Ver Información de Contacto")
         btn_cerrar = QPushButton("❌ Cerrar Aplicación")
-    
+        
         msg_box.addButton(btn_activar, QMessageBox.ButtonRole.ActionRole)
         msg_box.addButton(btn_contacto, QMessageBox.ButtonRole.ActionRole)
         msg_box.addButton(btn_cerrar, QMessageBox.ButtonRole.RejectRole)
-    
+        
         msg_box.exec()
-    
+        
         boton_presionado = msg_box.clickedButton()
-    
+        
         if boton_presionado == btn_activar:
             if self.mostrar_activacion():
                 if self.license_manager.validar_licencia():
@@ -1263,6 +1228,82 @@ class CajaGUI(QWidget):
         else:
             return False
         
+    def mostrar_bloqueo_permanente(self):
+        """Muestra diálogo de bloqueo permanente - NO PERMITE CONTINUAR"""
+        from PyQt6.QtWidgets import QMessageBox, QPushButton
+        import os
+        import sys
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("🚫 ACCESO BLOQUEADO")
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        
+        mensaje = f"""
+        🚫 LICENCIA DEMO EXPIRADA PERMANENTEMENTE
+        
+        Ha alcanzado el límite de {self.license_manager.limite_ventas_demo} ventas 
+        y la versión demo ha expirado.
+        
+        ⚠️ **EL PROGRAMA SE CERRARÁ**
+        
+        Para continuar usando el software debe activar una licencia premium.
+        
+        📞 **Contacto de soporte:**
+        󰇰 enc0d3rservicios@gmail.com
+        󰖣 5518604370
+        
+        💎 **Beneficios licencia premium:**
+        • Ventas ilimitadas
+        • Todas las funciones desbloqueadas  
+        • Soporte prioritario
+        • Actualizaciones gratuitas
+        """
+        
+        msg_box.setText(mensaje)
+    
+        btn_activar = QPushButton("🎫 Activar Licencia")
+        btn_salir = QPushButton("❌ Salir")
+    
+        msg_box.addButton(btn_activar, QMessageBox.ButtonRole.ActionRole)
+        msg_box.addButton(btn_salir, QMessageBox.ButtonRole.RejectRole)
+        
+        resultado = msg_box.exec()
+        
+        boton_presionado = msg_box.clickedButton()
+        
+        if boton_presionado == btn_activar:
+            # Mostrar diálogo de activación
+            self.mostrar_activacion()
+            
+            # Verificar si se activó la licencia
+            if self.license_manager.validar_licencia():
+                # ✅ LICENCIA ACTIVADA - REINICIAR APLICACIÓN
+                QMessageBox.information(self, "✅ Éxito", 
+                                    "Licencia premium activada correctamente.\n\n"
+                                    "La aplicación se reiniciará automáticamente...")
+                
+                print("🔄 Reiniciando aplicación con licencia premium...")
+                
+                # Cerrar la aplicación actual
+                self.close()
+                QApplication.quit()
+                
+                # Reiniciar la aplicación
+                python = sys.executable
+                os.execl(python, python, *sys.argv)
+                return True
+            else:
+                # ❌ NO SE PUDO ACTIVAR
+                QMessageBox.information(self, "❌ Bloqueado", 
+                                    "No se pudo activar una licencia válida.\n\n"
+                                    "La aplicación se cerrará.")
+                return False
+        else:
+            # ⏹️ USUARIO ELIGIÓ SALIR
+            QMessageBox.information(self, "👋 Salir", 
+                                "La aplicación se cerrará.")
+            return False
+        
     def mostrar_informacion_contacto(self):
         """Muestra información de contacto"""
         mensaje = """
@@ -1270,16 +1311,16 @@ class CajaGUI(QWidget):
     
         Para adquirir una licencia premium y desbloquear todas las funciones:
     
-        📧 **Email:** ventas@cajaregistradora.com
-        📱 **Teléfono:** +52 55 1234 5678
-        🌐 **Sitio web:** www.cajaregistradora.com
+        󰇰  Email: ventas@cajaregistradora.com
+        󰖣  WhatsApp: 5518604370
     
-        💰 **Planes disponibles:**
+        💰 Planes disponibles:
+        • Plan Mensual: $180 MXN
+        • Plan Bimestral: $300 MXN
         • Licencia Perpetua: $2,800 MXN
         • Suscripción Anual: $1,500 MXN/año  
-        • Plan Empresarial: $6,000 MXN
     
-        ⏰ **Horario de atención:**
+        ⏰ Horario de atención:
         Lunes a Viernes: 8:00 AM - 5:00 PM
         """
     

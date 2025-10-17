@@ -1,13 +1,13 @@
 {
-    "codigo": "TEST-164919",
-    "fecha_activacion": "2025-10-08T16:49:19.270137",
+    "codigo": "TEST-161846",
+    "fecha_activacion": "2025-10-16T16:18:46.602262",
     "duracion_dias": 7,
     "id_cliente": "TEST",
     "tipo": "personalizada",
     "version": "2.1",
-    "fecha_generacion": "2025-10-08T16:49:19.270153",
+    "fecha_generacion": "2025-10-16T16:18:46.602278",
     "equipo_id": "9705a3989821af628bead35a8a112467",
-    "hash_seguro": "b727ec258b2a05960a0cc84e492320d7fa5380431c76ebdeff4b8d828b1f0f5281d6a1e07379ff407714a9e5e109b098bffc09cbcaf9b1b6209999bc46e0884d",
-    "datos_encriptados": "gAAAAABo5upvjOz8iNWwomXD2bSmL9FwqbYTcLdLznobDI6-Mz7IOLrHyWjDh6Kxj23WAQN1rUCe0NeUV3vPNJv9JBtDvpjrbusgJCk6lqIROvyjUtB0j6JUPZHeDE0vKxilkVY297pnXy4ir9dE-5lsZ1eO-i_Rmg0kRrCtN9WWiEp-Fe6Ab1pTYoBwX-A3zE96XQ3v7u2xzggWqqtqLze3ij8hmn8fayhMY-9kSqXe0o5IlUcwXVavXNCHK2yRdlIHMoD2E2XhxjfQj0zI0lIt5whfao981Q==",
-    "checksum": "2444acddc5fde517d5b91f828a268138bccd7ae5b78e8d682d4f958ad5dbe61710807d803a65326513a0db40cc5a87d6edcdb51e1cf1bcad923150e0c8043e46"
+    "hash_seguro": "3d16934a485ca43a4a81af3b545614ebb7e14c63d63bb21d7fe591c4901d9a883d2df29d48bd2d5a3b021b934ccca175b0bd2c7167f5e106c6ede14c0c6e15f6",
+    "datos_encriptados": "gAAAAABo8W9G4pTnHF9gkxMQmDZvnkPH9l0xlucLzRY5_aVEVN-j7Wk58hlLyiRh60VUcFmIldb7VaHVdD3POrJrsJybVa8WOR1nw0robSWmBtiomJOXAo65VFO6GDXbJjulhrpN_7tU-Cljp6L40jsGyQw3xRV-uRZeEIOqWK5BTQXi8TnAVw1Cnwy0K-2jUdo-w5UWRh9LpaWWjC-bh-8F_Qgvs5MtXJBu1f2tgPZv8IQXXGeYeyQyyp5w6tjgo2AoUuY9hR19eLLdarKmqNKmV1Rjy-64_Q==",
+    "checksum": "ac9466e4c82d52de07312f312a6021a347669407d03b8c32ca868e28fd3b95ea628ecd832e1048b990f7d652f5c5e0d9dc500d87f848678238ecf5f5f58e44cc"
 }

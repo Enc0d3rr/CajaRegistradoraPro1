@@ -14,9 +14,30 @@ class DialogoActivacion(QDialog):
         super().__init__(parent)
         self.licencias_manager = licencias_manager
         self.tema = tema
+        
+        print(f"🎨 DIÁLOGO - Tema recibido: {tema}")
+
+        # ⬇️ DETECTAR TEMA DE FORMA MÁS AGGRESIVA
+        self.tema = tema
+        if parent:
+            # Intentar múltiples formas de detectar el tema del parent
+            if hasattr(parent, 'config') and 'tema' in parent.config:
+                self.tema = parent.config.get('tema', 'claro')
+            elif hasattr(parent, 'tema'):
+                self.tema = parent.tema
+            elif hasattr(parent, 'styleSheet') and 'background' in parent.styleSheet():
+                # Intentar detectar por el estilo
+                if '1e1e1e' in parent.styleSheet() or '2d2d2d' in parent.styleSheet():
+                    self.tema = 'oscuro'
+        
+        print(f"🎨 Diálogo activación: tema detectado = {self.tema}")
+        
         self.setWindowTitle("🎫 Activación de Licencia Premium - Seguridad Avanzada")
-        self.setFixedSize(800, 700)  # Un poco más grande para nueva información
+        self.setFixedSize(800, 700)
         self.init_ui()
+
+        self.setStyleSheet(self.obtener_estilo())
+        print("✅ Estilo aplicado al diálogo")
     
     def obtener_colores_tema(self):
         """Devuelve colores según el tema activo"""
@@ -109,6 +130,10 @@ class DialogoActivacion(QDialog):
         self.timer = QTimer()
         self.timer.timeout.connect(self.actualizar_estado)
         self.timer.start(1000)
+
+        print("🎨 Aplicando estilo al diálogo...")
+        self.setStyleSheet(self.obtener_estilo())
+        print("🎨 Estilo aplicado")
 
     def crear_seccion_equipo(self):
         """NUEVA SECCIÓN: Información del equipo actual"""

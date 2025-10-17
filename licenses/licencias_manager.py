@@ -1,5 +1,4 @@
 # ===== SEGURIDAD AVANZADA =====
-# ===== SEGURIDAD AVANZADA =====
 import json
 import os
 import uuid
@@ -60,8 +59,8 @@ class LicenseManager:
         self.licencia_path = "data/licencia.json"  
         self.config_demo_path = "data/config_demo.json"
         self.tipo_licencia = "demo"
-        self.limite_ventas_demo = 50
-        self.config_demo = {"ventas_realizadas": 0}
+        self.limite_ventas_demo = 30
+        self.config_demo = {"ventas_realizadas": 0, "licencia_expirada": False}
         
         # 🔐 SISTEMA DE SEGURIDAD COMPATIBLE
         self.security = SecurityManager()
@@ -101,8 +100,16 @@ class LicenseManager:
             if os.path.exists(self.config_demo_path):
                 with open(self.config_demo_path, 'r') as f:
                     self.config_demo = json.load(f)
+                    # ⬇️ GARANTIZAR que existe el campo licencia_expirada
+                    if 'licencia_expirada' not in self.config_demo:
+                        self.config_demo['licencia_expirada'] = False
             else:
-                self.config_demo = {"ventas_realizadas": 0}
+                self.config_demo = {"ventas_realizadas": 0, "licencia_expirada": False}
+                self._guardar_config_demo()
+            
+            # ⬇️ VERIFICAR SI LA LICENCIA DEMO YA EXPIRÓ
+            if self.config_demo["ventas_realizadas"] >= self.limite_ventas_demo:
+                self.config_demo['licencia_expirada'] = True
                 self._guardar_config_demo()
             
             # LICENCIA PREMIUM
@@ -112,6 +119,9 @@ class LicenseManager:
                 
                 if self._validar_licencia_generador(licencia_data):
                     self.tipo_licencia = "premium"
+                    # ⬇️ RESETEAR ESTADO DEMO SI SE ACTIVA LICENCIA PREMIUM
+                    self.config_demo['licencia_expirada'] = False
+                    self._guardar_config_demo()
                     print("✅ Licencia premium válida y activa")
                 else:
                     print("❌ Licencia inválida o expirada")
@@ -214,21 +224,55 @@ class LicenseManager:
             return False, f"Error activando licencia: {str(e)}"
         
     def validar_licencia(self):
-        """Validar licencia actual"""
-        if self.tipo_licencia == "premium":
-            if os.path.exists(self.licencia_path):
-                with open(self.licencia_path, 'r', encoding='utf-8') as f:
-                    licencia_data = json.load(f)
-                return self._validar_licencia_generador(licencia_data)
-        
-        if self.tipo_licencia == "demo":
-            if self.config_demo["ventas_realizadas"] >= self.limite_ventas_demo:
-                return False
-        
-        return self.tipo_licencia == "premium"
+        """Validar licencia actual - VERSIÓN CORREGIDA"""
+        try:
+            print(f"🔍 VALIDAR_LICENCIA: tipo={self.tipo_licencia}, ventas={self.config_demo['ventas_realizadas']}, expirada={self.config_demo.get('licencia_expirada', False)}")
+            
+            # 1. PRIMERO verificar licencia premium
+            if self.tipo_licencia == "premium":
+                if os.path.exists(self.licencia_path):
+                    with open(self.licencia_path, 'r', encoding='utf-8') as f:
+                        licencia_data = json.load(f)
+                    if self._validar_licencia_generador(licencia_data):
+                        # ✅ Licencia premium válida - resetear estado demo
+                        if self.config_demo.get('licencia_expirada', False):
+                            self.config_demo['licencia_expirada'] = False
+                            self._guardar_config_demo()
+                        print("✅ Licencia premium VÁLIDA")
+                        return True
+                    else:
+                        print("❌ Licencia premium INVÁLIDA")
+                        self.tipo_licencia = "demo"  # Cambiar a demo si la premium no es válida
+            
+            # 2. SI ES DEMO, verificar estado
+            if self.tipo_licencia == "demo":
+                # ⬇️ VERIFICAR SI YA ESTÁ MARCADA COMO EXPIRADA
+                if self.config_demo.get('licencia_expirada', False):
+                    print("❌ Demo EXPIRADA PERMANENTEMENTE")
+                    return False
+                
+                # ⬇️ VERIFICAR SI ACABA DE ALCANZAR EL LÍMITE
+                if self.config_demo["ventas_realizadas"] >= self.limite_ventas_demo:
+                    print("❌ Alcanzó límite demo - Marcando como EXPIRADA")
+                    self.config_demo['licencia_expirada'] = True
+                    self._guardar_config_demo()
+                    return False
+                
+                # ⬇️ DEMO ACTIVA
+                ventas_restantes = self.limite_ventas_demo - self.config_demo["ventas_realizadas"]
+                print(f"✅ Demo ACTIVA - Ventas restantes: {ventas_restantes}")
+                return True
+            
+            # 3. POR DEFECTO, NO PERMITIR ACCESO
+            print("❌ Estado de licencia DESCONOCIDO")
+            return False
+            
+        except Exception as e:
+            print(f"❌ Error validando licencia: {e}")
+            return False
     
     def obtener_info_licencia(self):
-        """Obtiene información de la licencia actual"""
+        """Obtiene información de la licencia actual - VERSIÓN CORREGIDA"""
         try:
             if self.tipo_licencia == "premium" and os.path.exists(self.licencia_path):
                 with open(self.licencia_path, 'r', encoding='utf-8') as f:
@@ -255,14 +299,25 @@ class LicenseManager:
                     'seguridad': 'avanzada'
                 }
             else:
-                # Modo demo
+                # Modo demo - VERSIÓN CORREGIDA CON LICENCIA_EXPIRADA
                 ventas_restantes = max(0, self.limite_ventas_demo - self.config_demo["ventas_realizadas"])
-                estado = 'activa' if ventas_restantes > 0 else 'expirada'
+                
+                # ⬇️ VERIFICAR PRIMERO SI YA ESTÁ MARCADA COMO EXPIRADA
+                if self.config_demo.get('licencia_expirada', False):
+                    estado = 'expirada'
+                    ventas_restantes = 0  # Forzar a 0 si está expirada
+                elif ventas_restantes > 0:
+                    estado = 'activa'
+                else:
+                    estado = 'expirada'
+                    # ⬇️ MARCAR COMO EXPIRADA SI SE ACABARON LAS VENTAS
+                    self.config_demo['licencia_expirada'] = True
+                    self._guardar_config_demo()
                 
                 return {
                     'tipo': 'demo',
                     'plan': 'demo',
-                    'estado': estado,
+                    'estado': estado,  # ⬅️ ESTADO CORREGIDO
                     'dias_restantes': ventas_restantes,
                     'expiracion': 'N/A',
                     'codigo': 'DEMO',
@@ -280,10 +335,22 @@ class LicenseManager:
             }
     
     def registrar_venta(self):
-        """Registrar venta en contador demo"""
+        """Registrar venta en contador demo - VERSIÓN MEJORADA"""
         if self.tipo_licencia == "demo":
+            # ⬇️ VERIFICAR QUE NO ESTÉ YA EXPIRADA
+            if self.config_demo.get('licencia_expirada', False):
+                return False
+                
             self.config_demo["ventas_realizadas"] += 1
+            
+            # ⬇️ SI ALCANZA EL LÍMITE, MARCAR COMO EXPIRADA
+            if self.config_demo["ventas_realizadas"] >= self.limite_ventas_demo:
+                self.config_demo['licencia_expirada'] = True
+                print("❌ LÍMITE DEMO ALCANZADO - Licencia expirada")
+            
             self._guardar_config_demo()
+            return True
+        return True
     
     def _guardar_config_demo(self):
         """Guardar configuración demo"""

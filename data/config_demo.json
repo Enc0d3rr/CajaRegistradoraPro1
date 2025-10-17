@@ -2,7 +2,8 @@
     "licencia_activa": false,
     "tipo_licencia": "demo",
     "fecha_instalacion": "2025-09-25T17:38:45.398849",
-    "ventas_realizadas": 5,
+    "ventas_realizadas": 30,
     "max_ventas_demo": 5,
-    "id_instalacion": "09bf0b428c73586c"
+    "id_instalacion": "09bf0b428c73586c",
+    "licencia_expirada": false
 }
